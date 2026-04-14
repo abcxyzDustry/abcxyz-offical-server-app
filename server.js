@@ -1,413 +1,468 @@
-const express    = require('express');
-const http       = require('http');
+const express = require('express');
+const http = require('http');
 const { Server } = require('socket.io');
-const mongoose   = require('mongoose');
-const bcrypt     = require('bcryptjs');
-const jwt        = require('jsonwebtoken');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const path       = require('path');
-const multer     = require('multer');
+const path = require('path');
+const axios = require('axios');
+const NodeCache = require('node-cache');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 require('dotenv').config();
 
-const app    = express();
+const app = express();
 const server = http.createServer(app);
-const io     = new Server(server, { cors: { origin: '*' } });
+const io = new Server(server, { 
+    cors: { origin: '*' },
+    maxHttpBufferSize: 1e6
+});
 
+// Middleware
+app.use(helmet({
+    contentSecurityPolicy: false,
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-const MONGO_URI  = process.env.MONGO_URI  || 'mongodb://localhost:27017/craborchat';
-const JWT_SECRET = process.env.JWT_SECRET || 'craborchat_secret_2024';
-const PORT       = process.env.PORT       || 3000;
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    message: { error: 'Too many requests' }
+});
+app.use('/api/', limiter);
 
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(e => console.error('MongoDB error:', e));
+// ==================== CONFIG ====================
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/craborchat';
+const JWT_SECRET = process.env.JWT_SECRET || require('crypto').randomBytes(64).toString('hex');
+const PORT = process.env.PORT || 3000;
+
+// Cache dịch thuật (TTL 24 giờ)
+const translationCache = new NodeCache({ stdTTL: 86400, maxKeys: 10000 });
 
 // ==================== SCHEMAS ====================
 const userSchema = new mongoose.Schema({
-  username:    { type: String, unique: true, required: true },
-  uuid:        { type: String, unique: true, sparse: true },  // Mindustry UUID
-  password:    String,
-  displayName: { type: String, default: '' },
-  avatar:      { type: String, default: '' },      // base64 hoac URL
-  bio:         { type: String, default: '' },
-  isGameAccount: { type: Boolean, default: false },
-  isOnline:    { type: Boolean, default: false },
-  lastSeen:    { type: Date, default: Date.now },
-  createdAt:   { type: Date, default: Date.now }
-});
-
-const postSchema = new mongoose.Schema({
-  authorId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  authorName: String,
-  authorAvatar: String,
-  content:    { type: String, required: true },
-  image:      String,
-  likes:      [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  comments:   [{
-    authorId:   mongoose.Schema.Types.ObjectId,
-    authorName: String,
-    authorAvatar: String,
-    content:    String,
-    createdAt:  { type: Date, default: Date.now }
-  }],
-  fromGame:   { type: Boolean, default: false },
-  createdAt:  { type: Date, default: Date.now }
+    username: { type: String, unique: true, required: true },
+    uuid: { type: String, unique: true, sparse: true },
+    password: String,
+    displayName: { type: String, default: '' },
+    avatar: { type: String, default: '' },
+    bio: { type: String, default: '' },
+    preferredLanguage: { type: String, default: 'en' },
+    detectedLanguage: { type: String, default: 'en' },
+    lastIp: { type: String, default: '' },
+    isGameAccount: { type: Boolean, default: false },
+    isOnline: { type: Boolean, default: false },
+    lastSeen: { type: Date, default: Date.now },
+    createdAt: { type: Date, default: Date.now }
 });
 
 const messageSchema = new mongoose.Schema({
-  roomId:     { type: String, required: true },   // 'global' | 'game' | userId_userId
-  senderId:   String,
-  senderName: String,
-  senderAvatar: String,
-  content:    { type: String, required: true },
-  fromGame:   { type: Boolean, default: false },  // tin nhan tu Mindustry
-  toGame:     { type: Boolean, default: false },  // se duoc relay len game
-  readBy:     [String],
-  createdAt:  { type: Date, default: Date.now }
+    roomId: { type: String, required: true },
+    senderId: String,
+    senderName: String,
+    senderAvatar: String,
+    originalContent: { type: String, required: true },
+    translatedContent: { type: Map, of: String },
+    sourceLanguage: { type: String, default: 'auto' },
+    fromGame: { type: Boolean, default: false },
+    toGame: { type: Boolean, default: false },
+    readBy: [String],
+    createdAt: { type: Date, default: Date.now, index: true }
 });
 
-const conversationSchema = new mongoose.Schema({
-  participants: [String],   // array of userId strings
-  lastMessage:  String,
-  lastAt:       { type: Date, default: Date.now },
-  unread:       { type: Map, of: Number, default: {} }
-});
+// Indexes for performance
+messageSchema.index({ roomId: 1, createdAt: -1 });
+messageSchema.index({ fromGame: 1, createdAt: 1 });
+messageSchema.index({ createdAt: -1 });
 
-const User         = mongoose.model('User',         userSchema);
-const Post         = mongoose.model('Post',         postSchema);
-const Message      = mongoose.model('Message',      messageSchema);
-const Conversation = mongoose.model('Conversation', conversationSchema);
+const User = mongoose.model('User', userSchema);
+const Message = mongoose.model('Message', messageSchema);
 
-// ==================== MIDDLEWARE ====================
-const auth = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token' });
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: 'Invalid token' }); }
-};
+// ==================== KẾT NỐI MONGODB ====================
+mongoose.connect(MONGO_URI)
+    .then(() => console.log('✅ MongoDB connected'))
+    .catch(e => console.error('❌ MongoDB error:', e));
+
+// ==================== DỊCH THUẬT UTILITY (GIỐNG PLUGIN) ====================
+async function translateText(text, sourceLang, targetLang) {
+    if (!text || text.trim().length === 0) return text;
+    if (sourceLang === targetLang) return text;
+    if (sourceLang === 'auto') sourceLang = 'en';
+    
+    // Check cache
+    const cacheKey = `${text}|${sourceLang}|${targetLang}`;
+    const cached = translationCache.get(cacheKey);
+    if (cached) return cached;
+    
+    try {
+        // Sử dụng Google Translate API (unofficial) giống plugin
+        const encodedText = encodeURIComponent(text);
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodedText}`;
+        
+        const response = await axios.get(url, {
+            timeout: 5000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        
+        if (response.data && response.data[0] && response.data[0][0] && response.data[0][0][0]) {
+            const translated = response.data[0][0][0];
+            if (translated && translated !== text) {
+                translationCache.set(cacheKey, translated);
+                console.log(`✅ Translated: ${text} (${sourceLang}) -> ${translated} (${targetLang})`);
+                return translated;
+            }
+        }
+    } catch (error) {
+        console.error('Translation error:', error.message);
+    }
+    
+    return text;
+}
 
 // ==================== SOCKET.IO ====================
-const onlineUsers = new Map(); // userId -> socketId
+const onlineUsers = new Map();
 
-io.on('connection', socket => {
-  // Auth socket
-  socket.on('auth', async token => {
-    try {
-      const d = jwt.verify(token, JWT_SECRET);
-      socket.userId = d.id;
-      socket.join(d.id);
-      socket.join('global');
-      onlineUsers.set(d.id, socket.id);
-      await User.findByIdAndUpdate(d.id, { isOnline: true, lastSeen: new Date() });
-      io.emit('user_online', { userId: d.id });
-    } catch {}
-  });
-
-  socket.on('join_room', roomId => socket.join(roomId));
-
-  socket.on('send_message', async ({ roomId, content, token }) => {
-    try {
-      const d = jwt.verify(token, JWT_SECRET);
-      const user = await User.findById(d.id);
-      if (!user) return;
-
-      const msg = await Message.create({
-        roomId, senderId: d.id, content,
-        senderName:   user.displayName || user.username,
-        senderAvatar: user.avatar || '',
-        toGame: roomId === 'game' || roomId === 'global'
-      });
-
-      io.to(roomId).emit('new_message', {
-        _id: msg._id, roomId, content,
-        senderId:     d.id,
-        senderName:   msg.senderName,
-        senderAvatar: msg.senderAvatar,
-        fromGame:     false,
-        createdAt:    msg.createdAt
-      });
-
-      // Update conversation
-      if (roomId !== 'global' && roomId !== 'game') {
-        await Conversation.findOneAndUpdate(
-          { participants: { $all: roomId.split('_') } },
-          { lastMessage: content, lastAt: new Date() },
-          { upsert: true }
-        );
-      }
-    } catch(e) { console.error('send_message:', e.message); }
-  });
-
-  socket.on('disconnect', async () => {
-    if (socket.userId) {
-      onlineUsers.delete(socket.userId);
-      await User.findByIdAndUpdate(socket.userId, { isOnline: false, lastSeen: new Date() });
-      io.emit('user_offline', { userId: socket.userId });
-    }
-  });
+io.on('connection', (socket) => {
+    console.log('🔌 Client connected:', socket.id);
+    
+    socket.on('auth', async (token) => {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            socket.userId = decoded.id;
+            socket.join(decoded.id);
+            socket.join('global');
+            onlineUsers.set(decoded.id, socket.id);
+            await User.findByIdAndUpdate(decoded.id, { isOnline: true, lastSeen: new Date() });
+            io.emit('user_online', { userId: decoded.id });
+            console.log('✅ User authenticated:', decoded.id);
+        } catch (err) {
+            console.error('Auth error:', err.message);
+        }
+    });
+    
+    socket.on('join_room', (roomId) => {
+        socket.join(roomId);
+        console.log(`📢 ${socket.id} joined room: ${roomId}`);
+    });
+    
+    socket.on('send_message', async ({ roomId, content, token }) => {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const user = await User.findById(decoded.id);
+            if (!user) return;
+            
+            const msg = await Message.create({
+                roomId,
+                senderId: decoded.id,
+                senderName: user.displayName || user.username,
+                senderAvatar: user.avatar || '',
+                originalContent: content,
+                sourceLanguage: user.preferredLanguage || 'en',
+                fromGame: false,
+                toGame: roomId === 'game' || roomId === 'global'
+            });
+            
+            io.to(roomId).emit('new_message', {
+                _id: msg._id,
+                roomId,
+                originalContent: content,
+                sourceLanguage: msg.sourceLanguage,
+                senderId: decoded.id,
+                senderName: msg.senderName,
+                senderAvatar: msg.senderAvatar,
+                fromGame: false,
+                createdAt: msg.createdAt
+            });
+            
+        } catch (err) {
+            console.error('Send message error:', err.message);
+        }
+    });
+    
+    socket.on('disconnect', async () => {
+        if (socket.userId) {
+            onlineUsers.delete(socket.userId);
+            await User.findByIdAndUpdate(socket.userId, { isOnline: false, lastSeen: new Date() });
+            io.emit('user_offline', { userId: socket.userId });
+            console.log('🔌 User disconnected:', socket.userId);
+        }
+    });
 });
 
 // ==================== AUTH ROUTES ====================
-// Dang ky bang username/password
 app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { username, password, displayName } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
-    if (username.length < 3)  return res.status(400).json({ error: 'Username >= 3 ky tu' });
-    if (password.length < 6)  return res.status(400).json({ error: 'Password >= 6 ky tu' });
-    if (await User.findOne({ username })) return res.status(400).json({ error: 'Username da ton tai' });
-    const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ username, password: hash, displayName: displayName || username });
-    const token = jwt.sign({ id: user._id, username }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { _id: user._id, username, displayName: user.displayName, avatar: user.avatar, bio: user.bio } });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// Dang nhap bang username/password
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    const user = await User.findOne({ username });
-    if (!user) return res.status(400).json({ error: 'Sai tai khoan/mat khau' });
-    if (!await bcrypt.compare(password, user.password)) return res.status(400).json({ error: 'Sai mat khau' });
-    const token = jwt.sign({ id: user._id, username }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { _id: user._id, username, displayName: user.displayName, avatar: user.avatar, bio: user.bio } });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// Dang nhap/dang ky bang Mindustry UUID (tu plugin ShopBank)
-app.post('/api/auth/uuid', async (req, res) => {
-  try {
-    const { uuid, username } = req.body;
-    if (!uuid) return res.status(400).json({ error: 'Missing uuid' });
-
-    let user = await User.findOne({ uuid });
-    if (!user) {
-      // Tao tai khoan moi tu UUID
-      let finalUsername = username || 'Player_' + uuid.substring(0, 6);
-      const exists = await User.findOne({ username: finalUsername });
-      if (exists) finalUsername = finalUsername + '_' + Date.now().toString().slice(-4);
-      const hash = await bcrypt.hash(uuid, 10);
-      user = await User.create({
-        username: finalUsername, password: hash,
-        displayName: username || finalUsername,
-        uuid, isGameAccount: true
-      });
+    try {
+        const { username, password, displayName } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
+        if (username.length < 3) return res.status(400).json({ error: 'Username >= 3 characters' });
+        if (password.length < 6) return res.status(400).json({ error: 'Password >= 6 characters' });
+        
+        const existing = await User.findOne({ username });
+        if (existing) return res.status(400).json({ error: 'Username already exists' });
+        
+        const hash = await bcrypt.hash(password, 10);
+        const user = await User.create({
+            username,
+            password: hash,
+            displayName: displayName || username
+        });
+        
+        const token = jwt.sign({ id: user._id, username }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({
+            token,
+            user: {
+                _id: user._id,
+                username,
+                displayName: user.displayName,
+                avatar: user.avatar,
+                bio: user.bio,
+                preferredLanguage: user.preferredLanguage
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-    const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { _id: user._id, username: user.username, displayName: user.displayName, avatar: user.avatar, bio: user.bio, uuid } });
-  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/auth/me', auth, async (req, res) => {
-  const user = await User.findById(req.user.id).select('-password');
-  if (!user) return res.status(404).json({ error: 'Not found' });
-  res.json(user);
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const user = await User.findOne({ username });
+        if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+        
+        const valid = await bcrypt.compare(password, user.password);
+        if (!valid) return res.status(400).json({ error: 'Invalid credentials' });
+        
+        const token = jwt.sign({ id: user._id, username }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({
+            token,
+            user: {
+                _id: user._id,
+                username,
+                displayName: user.displayName,
+                avatar: user.avatar,
+                bio: user.bio,
+                preferredLanguage: user.preferredLanguage
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/uuid', async (req, res) => {
+    try {
+        const { uuid, username, language } = req.body;
+        if (!uuid) return res.status(400).json({ error: 'Missing uuid' });
+        
+        let user = await User.findOne({ uuid });
+        if (!user) {
+            let finalUsername = username || 'Player_' + uuid.substring(0, 6);
+            const exists = await User.findOne({ username: finalUsername });
+            if (exists) finalUsername = finalUsername + '_' + Date.now().toString().slice(-4);
+            
+            const hash = await bcrypt.hash(uuid, 10);
+            user = await User.create({
+                username: finalUsername,
+                password: hash,
+                displayName: username || finalUsername,
+                uuid,
+                isGameAccount: true,
+                preferredLanguage: language || 'en'
+            });
+        }
+        
+        const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({
+            token,
+            user: {
+                _id: user._id,
+                username: user.username,
+                displayName: user.displayName,
+                avatar: user.avatar,
+                bio: user.bio,
+                uuid,
+                preferredLanguage: user.preferredLanguage
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==================== GAME BRIDGE API (QUAN TRỌNG) ====================
+
+// Poll tin nhắn từ web để gửi lên game
+app.get('/api/game/chat/poll', async (req, res) => {
+    try {
+        const since = req.query.since ? new Date(parseInt(req.query.since)) : new Date(Date.now() - 5000);
+        const gameLang = req.query.lang || 'en';
+        
+        const messages = await Message.find({
+            roomId: { $in: ['global', 'game'] },
+            fromGame: false,
+            createdAt: { $gt: since }
+        }).sort({ createdAt: 1 }).limit(30);
+        
+        // Dịch tin nhắn sang ngôn ngữ game yêu cầu
+        const translatedMessages = await Promise.all(messages.map(async (msg) => {
+            let translated = msg.translatedContent?.get(gameLang);
+            
+            if (!translated && msg.originalContent) {
+                translated = await translateText(msg.originalContent, msg.sourceLanguage, gameLang);
+                msg.translatedContent = msg.translatedContent || new Map();
+                msg.translatedContent.set(gameLang, translated);
+                await msg.save();
+            }
+            
+            return {
+                _id: msg._id,
+                senderName: msg.senderName,
+                originalContent: msg.originalContent,
+                translatedContent: translated || msg.originalContent,
+                sourceLanguage: msg.sourceLanguage,
+                createdAt: msg.createdAt
+            };
+        }));
+        
+        res.json(translatedMessages);
+        
+    } catch (err) {
+        console.error('Poll error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Nhận tin nhắn từ game
+app.post('/api/game/chat/send', async (req, res) => {
+    try {
+        const { uuid, username, originalContent, translatedContent, sourceLang, targetLang } = req.body;
+        
+        if (!originalContent?.trim()) {
+            return res.status(400).json({ error: 'Empty content' });
+        }
+        
+        // Tìm hoặc tạo user
+        let user = await User.findOne({ uuid });
+        if (!user && username) {
+            let finalUsername = username;
+            const exists = await User.findOne({ username: finalUsername });
+            if (exists) finalUsername = username + '_' + uuid.substring(0, 4);
+            
+            const hash = await bcrypt.hash(uuid || uuidv4(), 10);
+            user = await User.create({
+                username: finalUsername,
+                password: hash,
+                displayName: username,
+                uuid,
+                isGameAccount: true,
+                preferredLanguage: sourceLang || 'en'
+            });
+        }
+        
+        const displayName = user ? (user.displayName || user.username) : (username || 'Game Player');
+        const avatar = user?.avatar || '';
+        
+        // Lưu message
+        const translations = new Map();
+        if (translatedContent && targetLang) {
+            translations.set(targetLang, translatedContent);
+        }
+        
+        const msg = await Message.create({
+            roomId: 'global',
+            senderId: user?._id?.toString() || uuid,
+            senderName: displayName,
+            senderAvatar: avatar,
+            originalContent: originalContent,
+            translatedContent: translations,
+            sourceLanguage: sourceLang || 'auto',
+            fromGame: true,
+            toGame: false
+        });
+        
+        // Phát lên web clients
+        io.to('global').emit('new_message', {
+            _id: msg._id,
+            roomId: 'global',
+            originalContent: msg.originalContent,
+            sourceLanguage: msg.sourceLanguage,
+            senderId: msg.senderId,
+            senderName: msg.senderName,
+            senderAvatar: msg.senderAvatar,
+            fromGame: true,
+            createdAt: msg.createdAt
+        });
+        
+        console.log(`📨 Game message from ${displayName}: ${originalContent}`);
+        res.json({ success: true, messageId: msg._id });
+        
+    } catch (err) {
+        console.error('Game send error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lấy danh sách online
+app.get('/api/game/online', async (req, res) => {
+    try {
+        const users = await User.find({ isOnline: true })
+            .select('username displayName uuid isGameAccount preferredLanguage')
+            .limit(50);
+        res.json({ count: users.length, users });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ==================== PROFILE ROUTES ====================
-app.put('/api/profile', auth, async (req, res) => {
-  try {
-    const { displayName, bio, avatar } = req.body;
-    const update = {};
-    if (displayName !== undefined) update.displayName = displayName;
-    if (bio !== undefined)         update.bio         = bio;
-    if (avatar !== undefined)      update.avatar      = avatar;
-    const user = await User.findByIdAndUpdate(req.user.id, update, { new: true }).select('-password');
-    res.json(user);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/profile/:userId', async (req, res) => {
-  try {
-    const user = await User.findById(req.params.userId).select('-password');
-    if (!user) return res.status(404).json({ error: 'Not found' });
-    const posts = await Post.find({ authorId: user._id }).sort({ createdAt: -1 }).limit(20);
-    res.json({ user, posts });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/users/search', auth, async (req, res) => {
-  try {
-    const q = req.query.q || '';
-    const users = await User.find({
-      $or: [
-        { username:    { $regex: q, $options: 'i' } },
-        { displayName: { $regex: q, $options: 'i' } }
-      ]
-    }).select('-password').limit(20);
-    res.json(users);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== POSTS (FEED) ROUTES ====================
-app.get('/api/posts', auth, async (req, res) => {
-  try {
-    const page   = parseInt(req.query.page) || 1;
-    const limit  = 20;
-    const posts  = await Post.find()
-      .sort({ createdAt: -1 })
-      .skip((page-1)*limit).limit(limit);
-    res.json(posts);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/posts', auth, async (req, res) => {
-  try {
-    const { content, image } = req.body;
-    if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
-    const user = await User.findById(req.user.id);
-    const post = await Post.create({
-      authorId:     req.user.id,
-      authorName:   user.displayName || user.username,
-      authorAvatar: user.avatar || '',
-      content: content.trim(),
-      image:   image || ''
-    });
-    io.emit('new_post', post);
-    res.json(post);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/posts/:id/like', auth, async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Not found' });
-    const idx = post.likes.indexOf(req.user.id);
-    if (idx >= 0) post.likes.splice(idx, 1);
-    else post.likes.push(req.user.id);
-    await post.save();
-    io.emit('post_liked', { postId: post._id, likes: post.likes.length });
-    res.json({ likes: post.likes.length, liked: idx < 0 });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/posts/:id/comment', auth, async (req, res) => {
-  try {
-    const { content } = req.body;
-    if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
-    const user = await User.findById(req.user.id);
-    const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Not found' });
-    const comment = {
-      authorId:     req.user.id,
-      authorName:   user.displayName || user.username,
-      authorAvatar: user.avatar || '',
-      content:      content.trim()
-    };
-    post.comments.push(comment);
-    await post.save();
-    io.emit('post_commented', { postId: post._id, comment });
-    res.json(post);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/posts/:id', auth, async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Not found' });
-    if (post.authorId.toString() !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
-    await post.deleteOne();
-    io.emit('post_deleted', { postId: req.params.id });
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== CHAT ROUTES ====================
-// Lay messages cua 1 room
-app.get('/api/messages/:roomId', auth, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 50;
-    const msgs  = await Message.find({ roomId: req.params.roomId })
-      .sort({ createdAt: -1 }).limit(limit);
-    res.json(msgs.reverse());
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// Gui tin nhan (REST fallback)
-app.post('/api/messages', auth, async (req, res) => {
-  try {
-    const { roomId, content } = req.body;
-    if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
-    const user = await User.findById(req.user.id);
-    const msg  = await Message.create({
-      roomId, senderId: req.user.id, content: content.trim(),
-      senderName:   user.displayName || user.username,
-      senderAvatar: user.avatar || '',
-      toGame: roomId === 'global' || roomId === 'game'
-    });
-    io.to(roomId).emit('new_message', {
-      _id: msg._id, roomId, content: msg.content,
-      senderId: req.user.id,
-      senderName: msg.senderName,
-      senderAvatar: msg.senderAvatar,
-      fromGame: false, createdAt: msg.createdAt
-    });
-    res.json(msg);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== GAME BRIDGE API (cho Mindustry plugin) ====================
-
-// Plugin poll tin nhan moi tu web de hien len game
-app.get('/api/game/chat/poll', async (req, res) => {
-  try {
-    const since = req.query.since ? new Date(parseInt(req.query.since)) : new Date(Date.now() - 5000);
-    const msgs  = await Message.find({
-      roomId:  { $in: ['global', 'game'] },
-      fromGame: false,
-      createdAt: { $gt: since }
-    }).sort({ createdAt: 1 }).limit(20);
-    res.json(msgs);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// Plugin push tin nhan tu game len web
-app.post('/api/game/chat/send', async (req, res) => {
-  try {
-    const { uuid, username, content } = req.body;
-    if (!content?.trim()) return res.status(400).json({ error: 'Empty content' });
-
-    // Tim hoac tao user
-    let user = await User.findOne({ uuid });
-    if (!user && username) {
-      let finalUsername = username;
-      const exists = await User.findOne({ username: finalUsername });
-      if (exists) finalUsername = username + '_g' + uuid.substring(0, 4);
-      const hash = await bcrypt.hash(uuid || uuidv4(), 10);
-      user = await User.create({ username: finalUsername, password: hash, displayName: username, uuid, isGameAccount: true });
+const auth = (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No token' });
+    try {
+        req.user = jwt.verify(token, JWT_SECRET);
+        next();
+    } catch {
+        res.status(401).json({ error: 'Invalid token' });
     }
+};
 
-    const displayName = user ? (user.displayName || user.username) : (username || 'Game Player');
-    const avatar      = user?.avatar || '';
-
-    const msg = await Message.create({
-      roomId: 'global', senderId: user?._id?.toString() || uuid || uuidv4(),
-      senderName: displayName, senderAvatar: avatar,
-      content: content.trim(), fromGame: true
-    });
-
-    // Phat len tat ca web clients
-    io.to('global').emit('new_message', {
-      _id: msg._id, roomId: 'global', content: msg.content,
-      senderId: msg.senderId, senderName: msg.senderName,
-      senderAvatar: msg.senderAvatar,
-      fromGame: true, createdAt: msg.createdAt
-    });
-
-    res.json({ success: true, messageId: msg._id });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+app.get('/api/auth/me', auth, async (req, res) => {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) return res.status(404).json({ error: 'Not found' });
+    res.json(user);
 });
 
-// Plugin lay danh sach nguoi dang online tren web
-app.get('/api/game/online', async (req, res) => {
-  try {
-    const users = await User.find({ isOnline: true }).select('username displayName uuid isGameAccount').limit(50);
-    res.json({ count: users.length, users });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+app.put('/api/profile/language', auth, async (req, res) => {
+    try {
+        const { language } = req.body;
+        if (!language) return res.status(400).json({ error: 'Language required' });
+        
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { preferredLanguage: language },
+            { new: true }
+        ).select('-password');
+        
+        res.json({ success: true, preferredLanguage: user.preferredLanguage });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-server.listen(PORT, () => console.log(`🚀 CraborChat on :${PORT}`));
+// ==================== START SERVER ====================
+server.listen(PORT, () => {
+    console.log(`
+╔═══════════════════════════════════════════════════╗
+║     🦀 CRABORCHAT SERVER STARTED SUCCESSFULLY     ║
+╠═══════════════════════════════════════════════════╣
+║  Port: ${PORT}                                       ║
+║  MongoDB: ${MONGO_URI.includes('localhost') ? 'Local' : 'Remote'}        ║
+║  Translation: Google Translate API (unofficial)   ║
+║  Cache: 10,000 entries / 24h TTL                  ║
+╚═══════════════════════════════════════════════════╝
+    `);
+});
