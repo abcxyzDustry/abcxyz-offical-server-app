@@ -35,8 +35,8 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // ==================== CONFIG ====================
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/craborchat';
-const JWT_SECRET = process.env.JWT_SECRET || require('crypto').randomBytes(64).toString('hex');
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://craborchat:craborchat2024@cluster0.7yjcv.mongodb.net/craborchat?retryWrites=true&w=majority';
+const JWT_SECRET = process.env.JWT_SECRET || 'craborchat_secret_key_2024_secure_' + require('crypto').randomBytes(32).toString('hex');
 const PORT = process.env.PORT || 3000;
 
 // Cache dịch thuật (TTL 24 giờ)
@@ -82,23 +82,24 @@ const User = mongoose.model('User', userSchema);
 const Message = mongoose.model('Message', messageSchema);
 
 // ==================== KẾT NỐI MONGODB ====================
-mongoose.connect(MONGO_URI)
-    .then(() => console.log('✅ MongoDB connected'))
-    .catch(e => console.error('❌ MongoDB error:', e));
+mongoose.connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(e => console.error('❌ MongoDB error:', e.message));
 
-// ==================== DỊCH THUẬT UTILITY (GIỐNG PLUGIN) ====================
+// ==================== DỊCH THUẬT UTILITY ====================
 async function translateText(text, sourceLang, targetLang) {
     if (!text || text.trim().length === 0) return text;
     if (sourceLang === targetLang) return text;
     if (sourceLang === 'auto') sourceLang = 'en';
     
-    // Check cache
     const cacheKey = `${text}|${sourceLang}|${targetLang}`;
     const cached = translationCache.get(cacheKey);
     if (cached) return cached;
     
     try {
-        // Sử dụng Google Translate API (unofficial) giống plugin
         const encodedText = encodeURIComponent(text);
         const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodedText}`;
         
@@ -111,7 +112,7 @@ async function translateText(text, sourceLang, targetLang) {
             const translated = response.data[0][0][0];
             if (translated && translated !== text) {
                 translationCache.set(cacheKey, translated);
-                console.log(`✅ Translated: ${text} (${sourceLang}) -> ${translated} (${targetLang})`);
+                console.log(`✅ Translated: ${text.substring(0, 30)}... (${sourceLang}) -> ${translated.substring(0, 30)}... (${targetLang})`);
                 return translated;
             }
         }
@@ -293,9 +294,8 @@ app.post('/api/auth/uuid', async (req, res) => {
     }
 });
 
-// ==================== GAME BRIDGE API (QUAN TRỌNG) ====================
+// ==================== GAME BRIDGE API ====================
 
-// Poll tin nhắn từ web để gửi lên game
 app.get('/api/game/chat/poll', async (req, res) => {
     try {
         const since = req.query.since ? new Date(parseInt(req.query.since)) : new Date(Date.now() - 5000);
@@ -307,7 +307,6 @@ app.get('/api/game/chat/poll', async (req, res) => {
             createdAt: { $gt: since }
         }).sort({ createdAt: 1 }).limit(30);
         
-        // Dịch tin nhắn sang ngôn ngữ game yêu cầu
         const translatedMessages = await Promise.all(messages.map(async (msg) => {
             let translated = msg.translatedContent?.get(gameLang);
             
@@ -336,7 +335,6 @@ app.get('/api/game/chat/poll', async (req, res) => {
     }
 });
 
-// Nhận tin nhắn từ game
 app.post('/api/game/chat/send', async (req, res) => {
     try {
         const { uuid, username, originalContent, translatedContent, sourceLang, targetLang } = req.body;
@@ -345,7 +343,6 @@ app.post('/api/game/chat/send', async (req, res) => {
             return res.status(400).json({ error: 'Empty content' });
         }
         
-        // Tìm hoặc tạo user
         let user = await User.findOne({ uuid });
         if (!user && username) {
             let finalUsername = username;
@@ -366,7 +363,6 @@ app.post('/api/game/chat/send', async (req, res) => {
         const displayName = user ? (user.displayName || user.username) : (username || 'Game Player');
         const avatar = user?.avatar || '';
         
-        // Lưu message
         const translations = new Map();
         if (translatedContent && targetLang) {
             translations.set(targetLang, translatedContent);
@@ -384,7 +380,6 @@ app.post('/api/game/chat/send', async (req, res) => {
             toGame: false
         });
         
-        // Phát lên web clients
         io.to('global').emit('new_message', {
             _id: msg._id,
             roomId: 'global',
@@ -406,7 +401,6 @@ app.post('/api/game/chat/send', async (req, res) => {
     }
 });
 
-// Lấy danh sách online
 app.get('/api/game/online', async (req, res) => {
     try {
         const users = await User.find({ isOnline: true })
@@ -453,14 +447,19 @@ app.put('/api/profile/language', auth, async (req, res) => {
     }
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // ==================== START SERVER ====================
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║     🦀 CRABORCHAT SERVER STARTED SUCCESSFULLY     ║
 ╠═══════════════════════════════════════════════════╣
 ║  Port: ${PORT}                                       ║
-║  MongoDB: ${MONGO_URI.includes('localhost') ? 'Local' : 'Remote'}        ║
+║  Environment: ${process.env.NODE_ENV || 'production'}                          ║
 ║  Translation: Google Translate API (unofficial)   ║
 ║  Cache: 10,000 entries / 24h TTL                  ║
 ╚═══════════════════════════════════════════════════╝
