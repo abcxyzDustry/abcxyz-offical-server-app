@@ -387,98 +387,137 @@
   @media (max-width: 550px) {
     .msg-content-wrapper { max-width: 85%; }
   }
+
+  /* Auth screen */
+  #auth-screen {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at 10% 20%, #121624, #05070a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
 </style>
 </head>
 <body>
 
-<div class="app-container">
-  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
-  <div class="glass-sidebar" id="mobileSidebar">
-    <div class="logo-area">
-      <div class="logo-icon">✨</div>
-      <div class="logo-text">
-        <h2>abcxyz</h2>
-        <p>official app server</p>
-      </div>
+<!-- AUTH SCREEN - sẽ hiện nếu chưa đăng nhập -->
+<div id="auth-screen">
+  <div style="background:var(--glass-bg-solid); backdrop-filter:blur(20px); border:1px solid var(--glass-border); border-radius:32px; padding:32px; width:90%; max-width:380px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+      <div class="logo-icon" style="width:48px; height:48px;">✨</div>
+      <div><h2 style="font-size:22px;">abcxyz</h2><p style="font-size:11px; color:var(--text-muted);">official app server</p></div>
     </div>
-    <div class="nav-tabs">
-      <button class="nav-btn active" data-tab="feed"><span>📰</span> Feed</button>
-      <button class="nav-btn" data-tab="chat"><span>💬</span> Chat</button>
-      <button class="nav-btn" data-tab="game"><span>🎮</span> Game</button>
-      <button class="nav-btn" data-tab="profile"><span>👤</span> Profile</button>
+    <div style="display:flex; gap:8px; margin-bottom:20px;">
+      <button id="authLoginTab" class="btn-glass" style="flex:1;">Đăng nhập</button>
+      <button id="authRegTab" class="btn-glass" style="flex:1;">Đăng ký</button>
     </div>
-    <div class="search-area">
-      <input type="text" class="glass-input" id="sidebar-search" placeholder="🔍 Tìm kiếm người dùng...">
+    <div id="loginForm">
+      <input id="login-username" class="glass-input" placeholder="Tên đăng nhập" style="margin-bottom:12px;">
+      <input id="login-password" type="password" class="glass-input" placeholder="Mật khẩu" style="margin-bottom:16px;">
+      <button class="btn-glass btn-accent" style="width:100%;" id="loginBtn">Đăng nhập</button>
     </div>
-    <div class="sidebar-list" id="sidebar-list"></div>
-    <div class="game-online-panel" id="game-online-panel">
-      <div style="font-size:10px; text-transform:uppercase; margin-bottom:6px;">🎮 Đang chơi Mindustry</div>
-      <div id="game-online-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+    <div id="regForm" style="display:none;">
+      <input id="reg-display" class="glass-input" placeholder="Tên hiển thị" style="margin-bottom:12px;">
+      <input id="reg-username" class="glass-input" placeholder="Tên đăng nhập" style="margin-bottom:12px;">
+      <input id="reg-password" type="password" class="glass-input" placeholder="Mật khẩu" style="margin-bottom:16px;">
+      <button class="btn-glass btn-accent" style="width:100%;" id="regBtn">Đăng ký</button>
     </div>
   </div>
+</div>
 
-  <div class="main-panel">
-    <div class="top-bar">
-      <div style="display: flex; align-items: center;">
-        <button class="menu-toggle" id="menuToggleBtn">☰</button>
-        <div>
-          <div class="top-title" id="topbar-title">abcxyz Feed</div>
-          <div class="top-sub" id="topbar-sub">Cộng đồng Mindustry</div>
+<!-- MAIN APP - ẩn ban đầu, hiện sau khi đăng nhập -->
+<div id="app" style="display:none;">
+  <div class="app-container">
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
+    <div class="glass-sidebar" id="mobileSidebar">
+      <div class="logo-area">
+        <div class="logo-icon">✨</div>
+        <div class="logo-text">
+          <h2>abcxyz</h2>
+          <p>official app server</p>
         </div>
       </div>
-      <div><span id="online-count" style="background: rgba(46,204,113,0.2); padding: 4px 10px; border-radius: 30px; font-size: 12px;">● 0 online</span></div>
-    </div>
-
-    <!-- FEED VIEW -->
-    <div id="feed-view" class="view" style="display: flex;">
-      <div style="max-width: 620px; margin: 0 auto; width: 100%;">
-        <div class="glass-card post-composer">
-          <div class="composer-area">
-            <div class="room-avatar" style="width:40px; height:40px;" id="composer-avatar">👤</div>
-            <textarea id="post-input" rows="2" class="composer-input" placeholder="Bạn đang nghĩ gì về Mindustry?"></textarea>
-          </div>
-          <div class="post-actions-bar">
-            <button class="btn-glass" id="attachImageBtn">🖼 Ảnh</button>
-            <button class="btn-glass btn-accent" id="submitPostBtn">Đăng bài</button>
-          </div>
-          <div id="post-preview" style="display: none; margin-top: 8px;"></div>
-        </div>
-        <div id="posts-list" style="display: flex; flex-direction: column; gap: 16px;"></div>
+      <div class="nav-tabs">
+        <button class="nav-btn active" data-tab="feed"><span>📰</span> Feed</button>
+        <button class="nav-btn" data-tab="chat"><span>💬</span> Chat</button>
+        <button class="nav-btn" data-tab="game"><span>🎮</span> Game</button>
+        <button class="nav-btn" data-tab="profile"><span>👤</span> Profile</button>
+      </div>
+      <div class="search-area">
+        <input type="text" class="glass-input" id="sidebar-search" placeholder="🔍 Tìm kiếm người dùng...">
+      </div>
+      <div class="sidebar-list" id="sidebar-list"></div>
+      <div class="game-online-panel" id="game-online-panel">
+        <div style="font-size:10px; text-transform:uppercase; margin-bottom:6px;">🎮 Đang chơi Mindustry</div>
+        <div id="game-online-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
       </div>
     </div>
 
-    <!-- CHAT VIEW -->
-    <div id="chat-view" class="view" style="display: none; flex-direction: column; padding: 0;">
-      <div id="chat-messages" class="chat-messages-list"></div>
-      <div class="chat-input-container">
-        <textarea id="chat-input" class="chat-textarea" rows="1" placeholder="Nhập tin nhắn..."></textarea>
-        <button id="sendChatBtn" class="btn-glass btn-accent" style="padding: 8px 18px;">Gửi</button>
-      </div>
-    </div>
-
-    <!-- GAME VIEW -->
-    <div id="game-view" class="view" style="display: none; flex-direction: column; padding: 0;">
-      <div id="game-messages" class="chat-messages-list"></div>
-      <div class="chat-input-container">
-        <textarea id="game-input" class="chat-textarea" rows="1" placeholder="Nhắn tin tới Mindustry..."></textarea>
-        <button id="sendGameBtn" class="btn-glass btn-accent" style="background: #ff884d;">🎮 Gửi</button>
-      </div>
-    </div>
-
-    <!-- PROFILE VIEW -->
-    <div id="profile-view" class="view" style="display: none;">
-      <div class="glass-card" style="padding: 24px;">
-        <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
-          <div id="profile-avatar" style="width: 72px; height: 72px; background: var(--accent); border-radius: 60px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold;">?</div>
+    <div class="main-panel">
+      <div class="top-bar">
+        <div style="display: flex; align-items: center;">
+          <button class="menu-toggle" id="menuToggleBtn">☰</button>
           <div>
-            <h2 id="profile-name">...</h2>
-            <div id="profile-username">@username</div>
-            <div id="profile-bio" style="margin-top: 6px; color: var(--text-secondary);"></div>
-            <button id="editProfileBtn" class="btn-glass" style="margin-top: 12px;">✏️ Chỉnh sửa</button>
+            <div class="top-title" id="topbar-title">abcxyz Feed</div>
+            <div class="top-sub" id="topbar-sub">Cộng đồng Mindustry</div>
           </div>
         </div>
-        <div style="margin-top: 24px;"><strong>Bài viết của bạn</strong></div>
-        <div id="profile-posts" style="margin-top: 16px; display: flex; flex-direction: column; gap: 14px;"></div>
+        <div><span id="online-count" style="background: rgba(46,204,113,0.2); padding: 4px 10px; border-radius: 30px; font-size: 12px;">● 0 online</span></div>
+      </div>
+
+      <!-- FEED VIEW -->
+      <div id="feed-view" class="view" style="display: flex;">
+        <div style="max-width: 620px; margin: 0 auto; width: 100%;">
+          <div class="glass-card post-composer">
+            <div class="composer-area">
+              <div class="room-avatar" style="width:40px; height:40px;" id="composer-avatar">👤</div>
+              <textarea id="post-input" rows="2" class="composer-input" placeholder="Bạn đang nghĩ gì về Mindustry?"></textarea>
+            </div>
+            <div class="post-actions-bar">
+              <button class="btn-glass" id="attachImageBtn">🖼 Ảnh</button>
+              <button class="btn-glass btn-accent" id="submitPostBtn">Đăng bài</button>
+            </div>
+            <div id="post-preview" style="display: none; margin-top: 8px;"></div>
+          </div>
+          <div id="posts-list" style="display: flex; flex-direction: column; gap: 16px;"></div>
+        </div>
+      </div>
+
+      <!-- CHAT VIEW -->
+      <div id="chat-view" class="view" style="display: none; flex-direction: column; padding: 0;">
+        <div id="chat-messages" class="chat-messages-list"></div>
+        <div class="chat-input-container">
+          <textarea id="chat-input" class="chat-textarea" rows="1" placeholder="Nhập tin nhắn..."></textarea>
+          <button id="sendChatBtn" class="btn-glass btn-accent" style="padding: 8px 18px;">Gửi</button>
+        </div>
+      </div>
+
+      <!-- GAME VIEW -->
+      <div id="game-view" class="view" style="display: none; flex-direction: column; padding: 0;">
+        <div id="game-messages" class="chat-messages-list"></div>
+        <div class="chat-input-container">
+          <textarea id="game-input" class="chat-textarea" rows="1" placeholder="Nhắn tin tới Mindustry..."></textarea>
+          <button id="sendGameBtn" class="btn-glass btn-accent" style="background: #ff884d;">🎮 Gửi</button>
+        </div>
+      </div>
+
+      <!-- PROFILE VIEW -->
+      <div id="profile-view" class="view" style="display: none;">
+        <div class="glass-card" style="padding: 24px;">
+          <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+            <div id="profile-avatar" style="width: 72px; height: 72px; background: var(--accent); border-radius: 60px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold;">?</div>
+            <div>
+              <h2 id="profile-name">...</h2>
+              <div id="profile-username">@username</div>
+              <div id="profile-bio" style="margin-top: 6px; color: var(--text-secondary);"></div>
+              <button id="editProfileBtn" class="btn-glass" style="margin-top: 12px;">✏️ Chỉnh sửa</button>
+            </div>
+          </div>
+          <div style="margin-top: 24px;"><strong>Bài viết của bạn</strong></div>
+          <div id="profile-posts" style="margin-top: 16px; display: flex; flex-direction: column; gap: 14px;"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -491,7 +530,7 @@
     <input id="edit-display" class="glass-input" placeholder="Tên hiển thị" style="margin-bottom:12px;">
     <textarea id="edit-bio" class="glass-input" placeholder="Giới thiệu" rows="3" style="margin-bottom:16px;"></textarea>
     <div style="display:flex; gap:12px; justify-content:flex-end;">
-      <button class="btn-glass" onclick="closeEditModal()">Hủy</button>
+      <button class="btn-glass" id="closeModalBtn">Hủy</button>
       <button class="btn-glass btn-accent" id="saveProfileBtn">Lưu</button>
     </div>
   </div>
@@ -507,13 +546,13 @@
   let curRoom = 'global';
   let curTab = 'feed';
   let postImageB64 = '';
+  let appInitialized = false;
 
   const API = '';  // same origin - kết nối đến backend thật của bạn
 
   function toast(msg, type = 'success') {
     const el = document.createElement('div');
-    el.className = 'toast-item';
-    el.style.cssText = `background:var(--glass-bg-solid); border:1px solid var(--glass-border); padding:10px 16px; border-radius:12px; font-size:13px; color:${type === 'error' ? 'var(--accent)' : 'var(--green)'}`;
+    el.style.cssText = `background:var(--glass-bg-solid); border:1px solid var(--glass-border); padding:10px 16px; border-radius:12px; font-size:13px; margin-bottom:8px; color:${type === 'error' ? 'var(--accent)' : 'var(--green)'}`;
     el.textContent = msg;
     document.getElementById('toast').appendChild(el);
     setTimeout(() => el.remove(), 3500);
@@ -545,14 +584,33 @@
 
   // ==================== AUTH ====================
   async function doLogin() {
-    const username = document.getElementById('login-username')?.value.trim();
-    const password = document.getElementById('login-password')?.value;
-    if (!username || !password) return;
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!username || !password) { toast('Vui lòng nhập đầy đủ', 'error'); return; }
     const r = await api('POST', '/api/auth/login', { username, password });
     if (r.error) { toast(r.error, 'error'); return; }
-    token = r.token; localStorage.setItem('cc_token', token);
+    token = r.token;
     me = r.user;
-    startApp();
+    localStorage.setItem('cc_token', token);
+    // Ẩn auth screen, hiện app và khởi tạo (KHÔNG RELOAD)
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initApp();
+  }
+
+  async function doRegister() {
+    const displayName = document.getElementById('reg-display').value.trim();
+    const username = document.getElementById('reg-username').value.trim();
+    const password = document.getElementById('reg-password').value;
+    if (!displayName || !username || !password) { toast('Vui lòng nhập đầy đủ', 'error'); return; }
+    const r = await api('POST', '/api/auth/register', { username, password, displayName });
+    if (r.error) { toast(r.error, 'error'); return; }
+    token = r.token;
+    me = r.user;
+    localStorage.setItem('cc_token', token);
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initApp();
   }
 
   async function autoLogin() {
@@ -560,73 +618,44 @@
     const uuid = params.get('uuid');
     if (uuid) {
       const r = await api('POST', '/api/auth/uuid', { uuid });
-      if (!r.error) { token = r.token; localStorage.setItem('cc_token', token); me = r.user; startApp(); return; }
+      if (!r.error) {
+        token = r.token;
+        me = r.user;
+        localStorage.setItem('cc_token', token);
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        initApp();
+        return;
+      }
     }
     if (token) {
       try {
         const r = await api('GET', '/api/auth/me');
-        if (r._id) { me = r; startApp(); return; }
-      } catch { }
-      token = '';
-      localStorage.removeItem('cc_token');
+        if (r._id) {
+          me = r;
+          document.getElementById('auth-screen').style.display = 'none';
+          document.getElementById('app').style.display = 'block';
+          initApp();
+          return;
+        }
+      } catch(e) { console.log('auto login error', e); }
     }
-    showAuthScreen();
+    // Nếu chưa đăng nhập, giữ nguyên màn hình auth
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
   }
 
-  function showAuthScreen() {
-    document.body.innerHTML = `
-      <div style="position:fixed; inset:0; background:radial-gradient(circle at 10% 20%, #121624, #05070a); display:flex; align-items:center; justify-content:center; z-index:1000;">
-        <div style="background:var(--glass-bg-solid); backdrop-filter:blur(20px); border:1px solid var(--glass-border); border-radius:32px; padding:32px; width:90%; max-width:380px;">
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
-            <div class="logo-icon" style="width:48px; height:48px;">✨</div>
-            <div><h2 style="font-size:22px;">abcxyz</h2><p style="font-size:11px; color:var(--text-muted);">official app server</p></div>
-          </div>
-          <div style="display:flex; gap:8px; margin-bottom:20px;">
-            <button id="authLoginTab" class="btn-glass" style="flex:1;">Đăng nhập</button>
-            <button id="authRegTab" class="btn-glass" style="flex:1;">Đăng ký</button>
-          </div>
-          <div id="loginForm">
-            <input id="login-username" class="glass-input" placeholder="Tên đăng nhập" style="margin-bottom:12px;">
-            <input id="login-password" type="password" class="glass-input" placeholder="Mật khẩu" style="margin-bottom:16px;">
-            <button class="btn-glass btn-accent" style="width:100%;" onclick="doLogin()">Đăng nhập</button>
-          </div>
-          <div id="regForm" style="display:none;">
-            <input id="reg-display" class="glass-input" placeholder="Tên hiển thị" style="margin-bottom:12px;">
-            <input id="reg-username" class="glass-input" placeholder="Tên đăng nhập" style="margin-bottom:12px;">
-            <input id="reg-password" type="password" class="glass-input" placeholder="Mật khẩu" style="margin-bottom:16px;">
-            <button class="btn-glass btn-accent" style="width:100%;" onclick="doRegister()">Đăng ký</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.getElementById('authLoginTab').onclick = () => { document.getElementById('loginForm').style.display = 'block'; document.getElementById('regForm').style.display = 'none'; };
-    document.getElementById('authRegTab').onclick = () => { document.getElementById('loginForm').style.display = 'none'; document.getElementById('regForm').style.display = 'block'; };
-  }
-
-  async function doRegister() {
-    const displayName = document.getElementById('reg-display').value.trim();
-    const username = document.getElementById('reg-username').value.trim();
-    const password = document.getElementById('reg-password').value;
-    const r = await api('POST', '/api/auth/register', { username, password, displayName });
-    if (r.error) { toast(r.error, 'error'); return; }
-    token = r.token; localStorage.setItem('cc_token', token);
-    me = r.user;
-    startApp();
-  }
-
-  // ==================== APP START ====================
-  function startApp() {
-    document.body.innerHTML = ''; // clear auth screen
-    location.reload(); // simple reload to re-initialize with logged in state
-  }
-
-  // Initialize after login
+  // ==================== APP INIT (CHỈ GỌI 1 LẦN) ====================
   function initApp() {
+    if (appInitialized) return;
+    appInitialized = true;
+    
     initSocket();
     loadFeed();
     updateMyUI();
     loadConversations();
     loadGameOnline();
+    loadMyProfile();
     setInterval(loadGameOnline, 10000);
     switchTab('feed');
   }
@@ -646,6 +675,8 @@
       const btn = document.querySelector(`[data-like="${postId}"]`);
       if (btn) btn.innerHTML = `❤️ ${likes}`;
     });
+    socket.on('user_online', ({ userId }) => {});
+    socket.on('user_offline', ({ userId }) => {});
   }
 
   function updateMyUI() {
@@ -655,7 +686,8 @@
     document.getElementById('profile-bio').textContent = me.bio || '';
     const avatarEl = document.getElementById('profile-avatar');
     avatarEl.textContent = (me.displayName || me.username)[0].toUpperCase();
-    document.getElementById('composer-avatar').textContent = (me.displayName || me.username)[0].toUpperCase();
+    const composerAvatar = document.getElementById('composer-avatar');
+    if (composerAvatar) composerAvatar.textContent = (me.displayName || me.username)[0].toUpperCase();
   }
 
   // ==================== FEED ====================
@@ -672,7 +704,6 @@
     div.className = 'glass-card';
     div.style.padding = '16px';
     div.dataset.post = post._id;
-    const liked = post.likes?.includes(me?._id);
     div.innerHTML = `
       <div style="display:flex; gap:12px;">
         <div class="room-avatar" style="width:40px; height:40px;">${(post.authorName || '?')[0].toUpperCase()}</div>
@@ -681,14 +712,14 @@
       <div style="margin-top:12px; word-break:break-word;">${escHtml(post.content)}</div>
       ${post.image ? `<img src="${post.image}" style="max-width:100%; border-radius:16px; margin-top:12px;">` : ''}
       <div style="margin-top:12px; display:flex; gap:16px;">
-        <button class="btn-glass" data-like="${post._id}" onclick="likePost('${post._id}', this)">❤️ ${post.likes?.length || 0}</button>
-        <button class="btn-glass" onclick="toggleComments('${post._id}')">💬 ${post.comments?.length || 0}</button>
+        <button class="btn-glass" data-like="${post._id}" onclick="window.likePost('${post._id}', this)">❤️ ${post.likes?.length || 0}</button>
+        <button class="btn-glass" onclick="window.toggleComments('${post._id}')">💬 ${post.comments?.length || 0}</button>
       </div>
       <div id="comments-${post._id}" style="display:none; margin-top:12px;">
         ${(post.comments || []).map(c => `<div style="margin-top:8px;"><b>${escHtml(c.authorName)}</b>: ${escHtml(c.content)}</div>`).join('')}
         <div style="display:flex; gap:8px; margin-top:12px;">
           <input class="glass-input" id="comment-${post._id}" placeholder="Viết bình luận..." style="flex:1;">
-          <button class="btn-glass" onclick="submitComment('${post._id}')">Gửi</button>
+          <button class="btn-glass" onclick="window.submitComment('${post._id}')">Gửi</button>
         </div>
       </div>
     `;
@@ -697,7 +728,7 @@
 
   function prependPost(post) {
     const list = document.getElementById('posts-list');
-    list.insertBefore(buildPostEl(post), list.firstChild);
+    if (list) list.insertBefore(buildPostEl(post), list.firstChild);
   }
 
   async function submitPost() {
@@ -720,7 +751,7 @@
 
   async function submitComment(postId) {
     const input = document.getElementById(`comment-${postId}`);
-    if (!input.value.trim()) return;
+    if (!input || !input.value.trim()) return;
     const r = await api('POST', `/api/posts/${postId}/comment`, { content: input.value.trim() });
     if (!r.error) { input.value = ''; toast('Đã bình luận'); loadFeed(); }
   }
@@ -733,14 +764,16 @@
   // ==================== CHAT ====================
   async function loadConversations() {
     const list = document.getElementById('sidebar-list');
+    if (!list) return;
     list.innerHTML = `
       <div class="chat-room-item" data-room="global">
         <div class="room-avatar">🌐</div>
         <div class="room-info"><div class="room-name">#Global Chat</div><div class="room-sub">Mindustry cộng đồng</div></div>
       </div>
     `;
-    document.querySelector('[data-room="global"]').onclick = () => openRoom('global', '#Global Chat');
-    if (curRoom === 'global') document.querySelector('[data-room="global"]')?.classList.add('active');
+    const globalItem = document.querySelector('[data-room="global"]');
+    if (globalItem) globalItem.onclick = () => openRoom('global', '#Global Chat');
+    if (curRoom === 'global' && globalItem) globalItem.classList.add('active');
   }
 
   async function openRoom(roomId, displayName) {
@@ -749,8 +782,10 @@
     document.getElementById('topbar-sub').textContent = 'Trò chuyện';
     const r = await api('GET', `/api/messages/${roomId}?limit=50`);
     const container = document.getElementById('chat-messages');
-    container.innerHTML = '';
-    if (Array.isArray(r)) r.forEach(m => appendMessage(m));
+    if (container) {
+      container.innerHTML = '';
+      if (Array.isArray(r)) r.forEach(m => appendMessage(m));
+    }
     if (curTab !== 'chat') switchTab('chat');
   }
 
@@ -777,7 +812,7 @@
     const input = document.getElementById('chat-input');
     const content = input.value.trim();
     if (!content) return;
-    socket?.emit('send_message', { roomId: curRoom, content, token });
+    if (socket) socket.emit('send_message', { roomId: curRoom, content, token });
     input.value = '';
   }
 
@@ -785,6 +820,7 @@
   async function loadGameMessages() {
     const r = await api('GET', `/api/messages/global?limit=50`);
     const container = document.getElementById('game-messages');
+    if (!container) return;
     container.innerHTML = '';
     if (Array.isArray(r)) r.forEach(m => appendGameMessage(m));
   }
@@ -812,7 +848,7 @@
     const input = document.getElementById('game-input');
     const content = input.value.trim();
     if (!content) return;
-    socket?.emit('send_message', { roomId: 'global', content, token });
+    if (socket) socket.emit('send_message', { roomId: 'global', content, token });
     input.value = '';
   }
 
@@ -822,26 +858,29 @@
     const countEl = document.getElementById('online-count');
     if (!list) return;
     const totalOnline = r.count || 0;
-    countEl.textContent = `● ${totalOnline} online`;
+    if (countEl) countEl.textContent = `● ${totalOnline} online`;
     if (!r.users?.length) { list.innerHTML = '<span style="color:var(--text-muted);">Không có ai</span>'; return; }
     list.innerHTML = r.users.slice(0, 8).map(u => `<span style="background:rgba(255,255,255,0.1); padding:4px 12px; border-radius:20px; font-size:11px;">🎮 ${escHtml(u.displayName || u.username)}</span>`).join('');
   }
 
   // ==================== PROFILE ====================
   async function loadMyProfile() {
+    if (!me) return;
     const r = await api('GET', `/api/profile/${me._id}`);
     if (r.user) {
       me = { ...me, ...r.user };
       updateMyUI();
       const profilePosts = document.getElementById('profile-posts');
-      profilePosts.innerHTML = '';
-      (r.posts || []).forEach(p => {
-        const div = document.createElement('div');
-        div.className = 'glass-card';
-        div.style.padding = '12px';
-        div.textContent = p.content;
-        profilePosts.appendChild(div);
-      });
+      if (profilePosts) {
+        profilePosts.innerHTML = '';
+        (r.posts || []).forEach(p => {
+          const div = document.createElement('div');
+          div.className = 'glass-card';
+          div.style.padding = '12px';
+          div.textContent = p.content;
+          profilePosts.appendChild(div);
+        });
+      }
     }
   }
 
@@ -867,14 +906,23 @@
   // ==================== TAB & SEARCH ====================
   function switchTab(tab) {
     curTab = tab;
-    document.getElementById('feed-view').style.display = tab === 'feed' ? 'flex' : 'none';
-    document.getElementById('chat-view').style.display = tab === 'chat' ? 'flex' : 'none';
-    document.getElementById('game-view').style.display = tab === 'game' ? 'flex' : 'none';
-    document.getElementById('profile-view').style.display = tab === 'profile' ? 'flex' : 'none';
+    const feedView = document.getElementById('feed-view');
+    const chatView = document.getElementById('chat-view');
+    const gameView = document.getElementById('game-view');
+    const profileView = document.getElementById('profile-view');
+    if (feedView) feedView.style.display = tab === 'feed' ? 'flex' : 'none';
+    if (chatView) chatView.style.display = tab === 'chat' ? 'flex' : 'none';
+    if (gameView) gameView.style.display = tab === 'game' ? 'flex' : 'none';
+    if (profileView) profileView.style.display = tab === 'profile' ? 'flex' : 'none';
+    
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelector(`.nav-btn[data-tab="${tab}"]`).classList.add('active');
+    const activeBtn = document.querySelector(`.nav-btn[data-tab="${tab}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+    
     const titles = { feed: 'abcxyz Feed', chat: 'Trò chuyện', game: 'Mindustry Bridge', profile: 'Hồ sơ' };
-    document.getElementById('topbar-title').textContent = titles[tab];
+    const titleEl = document.getElementById('topbar-title');
+    if (titleEl) titleEl.textContent = titles[tab];
+    
     if (tab === 'feed') loadFeed();
     if (tab === 'chat') loadConversations();
     if (tab === 'game') loadGameMessages();
@@ -885,6 +933,7 @@
     if (!q.trim()) { loadConversations(); return; }
     const r = await api('GET', `/api/users/search?q=${encodeURIComponent(q)}`);
     const list = document.getElementById('sidebar-list');
+    if (!list) return;
     list.innerHTML = '';
     (r || []).filter(u => u._id !== me?._id).forEach(u => {
       const el = document.createElement('div');
@@ -900,59 +949,79 @@
   }
 
   function closeMobileSidebar() {
-    document.getElementById('mobileSidebar').classList.remove('mobile-open');
-    document.getElementById('sidebarBackdrop').classList.remove('active');
+    document.getElementById('mobileSidebar')?.classList.remove('mobile-open');
+    document.getElementById('sidebarBackdrop')?.classList.remove('active');
   }
 
   // ==================== EVENT BINDINGS ====================
-  window.onload = () => {
-    if (token && me) {
-      initApp();
-    } else {
-      autoLogin();
-    }
-  };
-
-  window.doLogin = doLogin;
-  window.doRegister = doRegister;
-  window.submitPost = submitPost;
+  // Gán các hàm ra window để có thể gọi từ onclick
   window.likePost = likePost;
   window.submitComment = submitComment;
   window.toggleComments = toggleComments;
-  window.sendMessage = sendMessage;
-  window.sendGameMessage = sendGameMessage;
+  window.closeMobileSidebar = closeMobileSidebar;
   window.openEditProfile = openEditProfile;
   window.closeEditModal = closeEditModal;
   window.saveProfile = saveProfile;
   window.switchTab = switchTab;
   window.onSearch = onSearch;
-  window.closeMobileSidebar = closeMobileSidebar;
+  window.doLogin = doLogin;
+  window.doRegister = doRegister;
 
-  document.getElementById('menuToggleBtn')?.addEventListener('click', () => {
-    document.getElementById('mobileSidebar').classList.add('mobile-open');
-    document.getElementById('sidebarBackdrop').classList.add('active');
-  });
-  document.getElementById('submitPostBtn')?.addEventListener('click', submitPost);
-  document.getElementById('sendChatBtn')?.addEventListener('click', sendMessage);
-  document.getElementById('sendGameBtn')?.addEventListener('click', sendGameMessage);
-  document.getElementById('editProfileBtn')?.addEventListener('click', openEditProfile);
-  document.getElementById('saveProfileBtn')?.addEventListener('click', saveProfile);
-  document.getElementById('sidebar-search')?.addEventListener('input', (e) => onSearch(e.target.value));
-  document.getElementById('chat-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
-  document.getElementById('game-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendGameMessage(); } });
-  document.getElementById('attachImageBtn')?.addEventListener('click', () => {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*';
-    inp.onchange = (e) => {
-      const reader = new FileReader();
-      reader.onload = ev => { postImageB64 = ev.target.result; document.getElementById('post-preview').innerHTML = `<img src="${postImageB64}" style="max-height:100px; border-radius:12px;">`; document.getElementById('post-preview').style.display = 'block'; };
-      reader.readAsDataURL(e.target.files[0]);
+  // Khởi chạy auto login khi trang load
+  autoLogin();
+
+  // DOM event listeners sau khi load
+  document.addEventListener('DOMContentLoaded', () => {
+    // Auth buttons
+    const authLoginTab = document.getElementById('authLoginTab');
+    const authRegTab = document.getElementById('authRegTab');
+    const loginBtn = document.getElementById('loginBtn');
+    const regBtn = document.getElementById('regBtn');
+    if (authLoginTab) authLoginTab.onclick = () => { document.getElementById('loginForm').style.display = 'block'; document.getElementById('regForm').style.display = 'none'; };
+    if (authRegTab) authRegTab.onclick = () => { document.getElementById('loginForm').style.display = 'none'; document.getElementById('regForm').style.display = 'block'; };
+    if (loginBtn) loginBtn.onclick = doLogin;
+    if (regBtn) regBtn.onclick = doRegister;
+    
+    // Main app buttons
+    const menuToggle = document.getElementById('menuToggleBtn');
+    if (menuToggle) menuToggle.onclick = () => {
+      document.getElementById('mobileSidebar')?.classList.add('mobile-open');
+      document.getElementById('sidebarBackdrop')?.classList.add('active');
     };
-    inp.click();
-  });
-
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => { switchTab(btn.dataset.tab); closeMobileSidebar(); });
+    const submitPostBtn = document.getElementById('submitPostBtn');
+    if (submitPostBtn) submitPostBtn.onclick = submitPost;
+    const sendChatBtn = document.getElementById('sendChatBtn');
+    if (sendChatBtn) sendChatBtn.onclick = sendMessage;
+    const sendGameBtn = document.getElementById('sendGameBtn');
+    if (sendGameBtn) sendGameBtn.onclick = sendGameMessage;
+    const editProfileBtn = document.getElementById('editProfileBtn');
+    if (editProfileBtn) editProfileBtn.onclick = openEditProfile;
+    const saveProfileBtn = document.getElementById('saveProfileBtn');
+    if (saveProfileBtn) saveProfileBtn.onclick = saveProfile;
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    if (closeModalBtn) closeModalBtn.onclick = closeEditModal;
+    const searchInput = document.getElementById('sidebar-search');
+    if (searchInput) searchInput.oninput = (e) => onSearch(e.target.value);
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) chatInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
+    const gameInput = document.getElementById('game-input');
+    if (gameInput) gameInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendGameMessage(); } };
+    const attachImage = document.getElementById('attachImageBtn');
+    if (attachImage) attachImage.onclick = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/*';
+      inp.onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = ev => { postImageB64 = ev.target.result; const preview = document.getElementById('post-preview'); if (preview) { preview.innerHTML = `<img src="${postImageB64}" style="max-height:100px; border-radius:12px;">`; preview.style.display = 'block'; } };
+        reader.readAsDataURL(e.target.files[0]);
+      };
+      inp.click();
+    };
+    
+    // Nav buttons
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.onclick = () => { switchTab(btn.dataset.tab); closeMobileSidebar(); };
+    });
   });
 </script>
 </body>
