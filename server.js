@@ -22,7 +22,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'craborchat_secret_2024';
 const PORT       = process.env.PORT       || 3000;
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected'))
+  .then(() => console.log('✅ abcxyz-offical-server-chat: MongoDB connected'))
   .catch(e => console.error('MongoDB error:', e));
 
 // =========================================================================
@@ -154,6 +154,8 @@ const userSchema = new mongoose.Schema({
   isGameAccount: { type: Boolean, default: false },
   isOnline:    { type: Boolean, default: false },
   lastSeen:    { type: Date, default: Date.now },
+  isAdmin:     { type: Boolean, default: false },
+  status:      { type: String, default: 'active' },
   createdAt:   { type: Date, default: Date.now }
 });
 
@@ -654,4 +656,94 @@ function sanitize(user) {
   return u;
 }
 
-server.listen(PORT, () => console.log(`🚀 CraborChat on :${PORT}`));
+
+// =========================================================================
+//  ADMIN ROUTES
+// =========================================================================
+const adminAuth = async (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    const d = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(d.id);
+    if (!user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+    req.user = d; next();
+  } catch { res.status(401).json({ error: 'Invalid token' }); }
+};
+
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = await User.findOne({ username, isAdmin: true });
+    if (!user) return res.status(400).json({ error: 'Không tìm thấy admin' });
+    if (!await bcrypt.compare(password, user.password)) return res.status(400).json({ error: 'Sai mật khẩu' });
+    const token = jwt.sign({ id: user._id, username, isAdmin: true }, JWT_SECRET, { expiresIn: '1d' });
+    res.json({ token, username });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/admin/users', adminAuth, async (req, res) => {
+  const users = await User.find({}).select('-password').sort({ createdAt: -1 });
+  res.json(users);
+});
+
+app.put('/api/admin/users/:id', adminAuth, async (req, res) => {
+  try {
+    const { displayName, lang, status } = req.body;
+    const update = {};
+    if (displayName !== undefined) update.displayName = displayName;
+    if (lang !== undefined) update.lang = lang;
+    if (status !== undefined) update.status = status;
+    const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password');
+    if (!user) return res.status(404).json({ error: 'Not found' });
+    res.json(user);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/admin/posts', adminAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const page  = parseInt(req.query.page)  || 1;
+    const total = await Post.countDocuments();
+    const posts = await Post.find().sort({ createdAt: -1 }).skip((page-1)*limit).limit(limit);
+    res.json({ posts, total, page });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/posts/:id', adminAuth, async (req, res) => {
+  try {
+    await Post.findByIdAndDelete(req.params.id);
+    io.emit('post_deleted', { postId: req.params.id });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/admin/messages', adminAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const total = await Message.countDocuments({ roomId: 'global' });
+    const msgs  = await Message.find({ roomId: 'global' }).sort({ createdAt: -1 }).limit(limit);
+    res.json({ messages: msgs.reverse(), total });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/messages/:id', adminAuth, async (req, res) => {
+  try {
+    await Message.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin tao tu dong khi khong co
+async function ensureAdmin() {
+  const admin = await User.findOne({ isAdmin: true });
+  if (!admin) {
+    const hash = await bcrypt.hash('Admin@2024!', 10);
+    await User.create({ username: 'admin', password: hash, displayName: 'Admin', isAdmin: true, lang: 'vi' });
+    console.log('✅ Admin created: admin / Admin@2024!');
+  }
+}
+mongoose.connection.once('open', ensureAdmin);
+
+
+server.listen(PORT, () => console.log(`🚀 abcxyz-offical-server-chat on :${PORT}`));
