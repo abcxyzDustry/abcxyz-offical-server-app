@@ -25,8 +25,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #sidebar{
   width:var(--sidebar);min-width:var(--sidebar);max-width:var(--sidebar);
   background:var(--surface);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;transition:transform .25s ease;
-  z-index:50;
+  display:flex;flex-direction:column;transition:transform .25s ease;z-index:50;
 }
 #main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
 
@@ -38,12 +37,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   flex-shrink:0;gap:10px;
 }
 .topbar-left{display:flex;align-items:center;gap:10px;min-width:0}
-.menu-btn{
-  display:none;width:36px;height:36px;border:none;
-  background:transparent;color:var(--text);cursor:pointer;
-  font-size:20px;align-items:center;justify-content:center;
-  flex-shrink:0;
-}
+.menu-btn{display:none;width:36px;height:36px;border:none;background:transparent;color:var(--text);cursor:pointer;font-size:20px;align-items:center;justify-content:center;flex-shrink:0}
 .topbar-av{width:34px;height:34px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;overflow:hidden;flex-shrink:0}
 .topbar-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .topbar-info{min-width:0}
@@ -89,7 +83,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .post-hdr{padding:12px 14px 0;display:flex;align-items:center;gap:8px}
 .post-author{font-size:13px;font-weight:600}
-.post-time{font-size:10px;color:var(--muted);margin-left:auto}
 .game-badge{font-size:8px;font-family:var(--mono);background:var(--accent);color:#fff;padding:2px 5px;border-radius:3px;margin-left:4px}
 .post-body{padding:10px 14px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .post-img{width:100%;max-height:260px;object-fit:cover}
@@ -105,12 +98,19 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .cmt-in{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:6px 12px;color:var(--text);font-family:var(--font);font-size:12px;outline:none}
 .cmt-in:focus{border-color:var(--accent)}
 
-/* ── CHAT ── */
+/* ── CHAT VIEW (dùng cho cả DM lẫn Global) ── */
 #chat-view{flex:1;display:flex;flex-direction:column;min-height:0}
-#game-view{flex:1;display:flex;flex-direction:column;min-height:0}
 .chat-msgs{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 
-/* MESSAGE ROW — fix bug mỗi chữ 1 dòng */
+/* ── GLOBAL BANNER (hiện trong chat-msgs khi ở global) ── */
+.global-banner{
+  text-align:center;padding:10px 14px;margin-bottom:4px;
+  background:linear-gradient(90deg,rgba(74,158,255,.08),rgba(74,158,255,.16),rgba(74,158,255,.08));
+  border:1px solid rgba(74,158,255,.25);border-radius:10px;
+  font-size:11px;color:var(--blue);font-weight:600;
+}
+
+/* ── MESSAGE ROW ── */
 .msg-row{display:flex;gap:8px;align-items:flex-end;max-width:100%}
 .msg-row.own{flex-direction:row-reverse}
 .msg-av{width:26px;height:26px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;overflow:hidden}
@@ -119,31 +119,24 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .msg-row.own .msg-group{align-items:flex-end}
 .msg-sender{font-size:10px;font-weight:600;color:var(--accent);margin-bottom:1px}
 .msg-bubble{
-  /* QUAN TRỌNG: display:inline-block và không dùng flex/column */
   display:inline-block;
-  padding:8px 12px;
-  border-radius:14px;
-  font-size:13px;
-  line-height:1.5;
-  word-break:break-word;
-  word-wrap:break-word;
-  white-space:pre-wrap;
-  max-width:100%;
+  padding:8px 12px;border-radius:14px;
+  font-size:13px;line-height:1.5;
+  word-break:break-word;word-wrap:break-word;white-space:pre-wrap;max-width:100%;
 }
 .msg-row:not(.own) .msg-bubble{background:var(--card);border-bottom-left-radius:4px}
 .msg-row.own .msg-bubble{background:var(--accent);color:#fff;border-bottom-right-radius:4px}
-.msg-row.game .msg-bubble{background:var(--card);border:1px solid var(--accent);border-bottom-left-radius:4px}
+.msg-row.game .msg-bubble{background:var(--card);border:1px solid rgba(74,158,255,.4);border-bottom-left-radius:4px}
 .msg-meta{font-size:9px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:3px}
 .msg-row.own .msg-meta{justify-content:flex-end}
-.game-tag{font-size:8px;font-family:var(--mono);background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px}
+.game-tag{font-size:8px;font-family:var(--mono);background:var(--blue);color:#fff;padding:1px 4px;border-radius:3px}
 .trans-hint{font-size:9px;color:var(--muted);font-style:italic}
 
 /* ── INPUT AREA ── */
 .chat-input-area{
   padding:10px 12px;background:var(--surface);
   border-top:1px solid var(--border);
-  display:flex;gap:8px;align-items:flex-end;
-  flex-shrink:0;
+  display:flex;gap:8px;align-items:flex-end;flex-shrink:0;
 }
 .chat-in{
   flex:1;background:var(--card);border:1px solid var(--border);
@@ -159,6 +152,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   font-size:16px;flex-shrink:0;transition:.15s;
 }
 .send-btn:hover,.send-btn:active{background:var(--accent2)}
+/* Global send btn màu xanh */
+.send-btn.global{background:var(--blue)}
+.send-btn.global:hover{background:#6db3ff}
 
 /* ── PROFILE ── */
 #profile-view{flex:1;overflow-y:auto;padding:14px}
@@ -219,17 +215,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
 /* ── MOBILE ── */
 @media(max-width:640px){
-  :root{--sidebar:260px}
-  #sidebar{
-    position:fixed;left:0;top:0;bottom:0;
-    transform:translateX(-100%);
-  }
+  #sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%)}
   #sidebar.open{transform:translateX(0)}
   #sidebar-overlay{display:block}
   #sidebar-overlay.open{pointer-events:all}
   .menu-btn{display:flex}
   .chat-msgs{padding:10px}
-  .msg-bubble{font-size:13px}
   #feed-view{padding:10px}
   .composer,.post-card{max-width:100%}
   #topbar{padding:0 10px}
@@ -280,13 +271,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       </div>
     </div>
     <div class="sidebar-nav">
-      <button class="nav-btn active" id="nav-feed" onclick="switchTab('feed')"><span class="ni">📰</span>Feed</button>
-      <button class="nav-btn" id="nav-chat" onclick="switchTab('chat')"><span class="ni">💬</span>Chat</button>
-      <button class="nav-btn" id="nav-game" onclick="switchTab('game')"><span class="ni">🎮</span>Game</button>
-      <button class="nav-btn" id="nav-profile" onclick="switchTab('profile')"><span class="ni">👤</span>Tôi</button>
+      <button class="nav-btn active" id="nav-feed"    onclick="switchTab('feed')">   <span class="ni">📰</span>Feed</button>
+      <button class="nav-btn"        id="nav-chat"    onclick="switchTab('chat')">   <span class="ni">💬</span>Chat</button>
+      <button class="nav-btn"        id="nav-profile" onclick="switchTab('profile')"><span class="ni">👤</span>Tôi</button>
     </div>
-    <div class="sidebar-search" id="s-search-wrap">
-      <input class="search-in" id="s-search" placeholder="Tìm kiếm..." oninput="onSearch(this.value)">
+    <!-- search chỉ hiện khi tab chat -->
+    <div class="sidebar-search" id="s-search-wrap" style="display:none">
+      <input class="search-in" id="s-search" placeholder="Tìm người dùng..." oninput="onSearch(this.value)">
     </div>
     <div class="sidebar-list" id="sidebar-list"></div>
   </div>
@@ -298,16 +289,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <div class="topbar-av" id="tb-av">?</div>
         <div class="topbar-info">
           <div class="topbar-title" id="tb-title">Feed</div>
-          <div class="topbar-sub" id="tb-sub">Bài đăng mới nhất</div>
+          <div class="topbar-sub"  id="tb-sub">Bài đăng mới nhất</div>
         </div>
       </div>
       <div class="topbar-right">
-        <button class="icon-btn" onclick="switchTab('profile')">⚙️</button>
+        <button class="icon-btn" title="Profile" onclick="switchTab('profile')">⚙️</button>
       </div>
     </div>
 
     <div id="content">
-      <!-- FEED -->
+
+      <!-- ═══ FEED ═══ -->
       <div id="feed-view">
         <div class="composer">
           <div class="comp-row">
@@ -316,7 +308,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
           </div>
           <div class="comp-actions">
             <button class="btn btn-secondary btn-sm" onclick="addImg()">🖼</button>
-            <button class="btn btn-primary btn-sm" onclick="submitPost()">Đăng</button>
+            <button class="btn btn-primary btn-sm"   onclick="submitPost()">Đăng</button>
           </div>
           <div id="post-preview" style="display:none;margin-top:8px"></div>
         </div>
@@ -324,27 +316,25 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <div style="height:32px"></div>
       </div>
 
-      <!-- CHAT -->
+      <!-- ═══ CHAT (DM + Global — 1 view duy nhất) ═══ -->
       <div id="chat-view" style="display:none;flex:1;flex-direction:column">
         <div class="chat-msgs" id="chat-msgs">
-          <div style="text-align:center;color:var(--muted);padding:30px;font-size:13px">Chọn cuộc trò chuyện từ danh sách bên trái</div>
+          <div style="text-align:center;color:var(--muted);padding:30px;font-size:13px">
+            Chọn phòng chat từ danh sách bên trái
+          </div>
         </div>
+        <!-- Input area — nút send đổi màu theo loại room -->
         <div class="chat-input-area">
-          <textarea class="chat-in" id="chat-in" placeholder="Nhắn tin..." rows="1" onkeydown="chatKey(event,'chat')" oninput="autoH(this)"></textarea>
-          <button class="send-btn" onclick="sendMsg()">➤</button>
+          <textarea class="chat-in" id="chat-in"
+            placeholder="Nhắn tin..."
+            rows="1"
+            onkeydown="chatKey(event)"
+            oninput="autoH(this)"></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendMsg()">➤</button>
         </div>
       </div>
 
-      <!-- GAME GLOBAL -->
-      <div id="game-view" style="display:none;flex:1;flex-direction:column">
-        <div class="chat-msgs" id="game-msgs"></div>
-        <div class="chat-input-area">
-          <textarea class="chat-in" id="game-in" placeholder="Nhắn tin tới Mindustry..." rows="1" onkeydown="chatKey(event,'game')" oninput="autoH(this)"></textarea>
-          <button class="send-btn" style="background:var(--blue)" onclick="sendGameMsg()">🎮</button>
-        </div>
-      </div>
-
-      <!-- PROFILE -->
+      <!-- ═══ PROFILE ═══ -->
       <div id="profile-view" style="display:none;overflow-y:auto;padding:14px">
         <div class="prof-hdr">
           <div class="prof-cover" id="prof-cover"></div>
@@ -355,16 +345,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
           </div>
           <div class="prof-info">
             <div class="prof-name" id="prof-name">...</div>
-            <div class="prof-un" id="prof-un">@...</div>
-            <div class="prof-bio" id="prof-bio"></div>
+            <div class="prof-un"   id="prof-un">@...</div>
+            <div class="prof-bio"  id="prof-bio"></div>
             <button class="prof-edit" onclick="openEditProf()">✏️ Chỉnh sửa</button>
           </div>
         </div>
         <div id="prof-posts" style="display:flex;flex-direction:column;gap:12px;max-width:560px;margin:0 auto"></div>
       </div>
-    </div>
-  </div>
-</div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
 
 <!-- MODALS -->
 <div class="modal-ov" id="edit-modal">
@@ -374,7 +365,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <div class="form-group"><label class="form-label">Giới thiệu</label><textarea class="form-input" id="e-bio" rows="3" style="resize:vertical"></textarea></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeModal('edit-modal')">Hủy</button>
-      <button class="btn btn-primary" onclick="saveProf()">Lưu</button>
+      <button class="btn btn-primary"   onclick="saveProf()">Lưu</button>
     </div>
   </div>
 </div>
@@ -382,179 +373,377 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <div id="toast"></div>
 
 <script>
-// ── STATE ──
+// ══════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════
 let token = localStorage.getItem('ax_token') || '';
-let me = null, socket = null, curRoom = 'global', curTab = 'feed';
+let me = null, socket = null;
+let curRoom = null;          // null = chưa chọn room nào
+let curRoomIsGlobal = false; // true khi đang ở #Global
+let curTab = 'feed';
 let postImgB64 = '';
 const API = '';
 
-// ── UTILS ──
+// ══════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════
 const $ = id => document.getElementById(id);
 function toast(msg, type='success'){
-  const el=document.createElement('div');
-  el.className='toast-item '+type;
-  el.textContent=msg;
+  const el = document.createElement('div');
+  el.className = 'toast-item ' + type;
+  el.textContent = msg;
   $('toast').appendChild(el);
-  setTimeout(()=>el.remove(),3000);
+  setTimeout(() => el.remove(), 3000);
 }
-function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 function timeAgo(d){
-  const s=(Date.now()-new Date(d))/1000;
-  if(s<60)return'vừa xong';if(s<3600)return~~(s/60)+'ph';
-  if(s<86400)return~~(s/3600)+'g';return~~(s/86400)+'ng';
+  const s = (Date.now() - new Date(d)) / 1000;
+  if(s<60) return 'vừa xong';
+  if(s<3600) return ~~(s/60)+'ph';
+  if(s<86400) return ~~(s/3600)+'g';
+  return ~~(s/86400)+'ng';
 }
 function avBg(u){
   const c=['#e8504a','#4a9eff','#2ed573','#f5c842','#9b59b6','#e17055'];
-  const n=(u?.displayName||u?.username||'?');
-  return c[n.charCodeAt(0)%c.length];
+  const n = u?.displayName || u?.username || '?';
+  return c[n.charCodeAt(0) % c.length];
 }
-function avHTML(u,sz=34){
-  if(u?.avatar)return`<img src="${u.avatar}" style="width:${sz}px;height:${sz}px;object-fit:cover;border-radius:50%">`;
-  const n=(u?.displayName||u?.username||'?');
-  return`<span style="font-size:${~~(sz*.38)}px;font-weight:700">${n[0].toUpperCase()}</span>`;
+async function api(method, path, body){
+  const o = {method, headers:{'Content-Type':'application/json'}};
+  if(token) o.headers['Authorization'] = 'Bearer ' + token;
+  if(body)  o.body = JSON.stringify(body);
+  const r = await fetch(API + path, o);
+  return r.json();
 }
-async function api(method,path,body){
-  const o={method,headers:{'Content-Type':'application/json'}};
-  if(token)o.headers['Authorization']='Bearer '+token;
-  if(body)o.body=JSON.stringify(body);
-  const r=await fetch(API+path,o);return r.json();
-}
-function autoH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px'}
-function chatKey(e,type){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();type==='chat'?sendMsg():sendGameMsg()}}
-
-// ── SIDEBAR MOBILE ──
-function toggleSidebar(){
-  $('sidebar').classList.toggle('open');
-  $('sidebar-overlay').classList.toggle('open');
-}
-function closeSidebar(){
-  $('sidebar').classList.remove('open');
-  $('sidebar-overlay').classList.remove('open');
+function autoH(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,100)+'px' }
+function chatKey(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMsg(); }
 }
 
-// ── AUTH ──
+// ══════════════════════════════════════════════════════
+//  SIDEBAR MOBILE
+// ══════════════════════════════════════════════════════
+function toggleSidebar(){ $('sidebar').classList.toggle('open'); $('sidebar-overlay').classList.toggle('open'); }
+function closeSidebar(){  $('sidebar').classList.remove('open'); $('sidebar-overlay').classList.remove('open'); }
+
+// ══════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════
 function switchAuthTab(t){
-  $('login-form').style.display=t==='login'?'block':'none';
-  $('register-form').style.display=t==='register'?'block':'none';
-  document.querySelectorAll('.auth-tab').forEach((b,i)=>b.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='register')));
+  $('login-form').style.display    = t==='login'    ? 'block' : 'none';
+  $('register-form').style.display = t==='register' ? 'block' : 'none';
+  document.querySelectorAll('.auth-tab').forEach((b,i) =>
+    b.classList.toggle('active', (i===0&&t==='login')||(i===1&&t==='register')));
 }
 async function doLogin(){
-  const btn=$('login-btn'); btn.disabled=true; btn.textContent='...';
+  const btn = $('login-btn'); btn.disabled=true; btn.textContent='...';
   try{
-    const r=await api('POST','/api/auth/login',{username:$('l-user').value.trim(),password:$('l-pass').value});
-    if(r.error){toast(r.error,'error');return;}
-    token=r.token;localStorage.setItem('ax_token',token);me=r.user;startApp();
-  }catch{toast('Lỗi kết nối','error');}
-  finally{btn.disabled=false;btn.textContent='Đăng nhập';}
+    const r = await api('POST','/api/auth/login',{username:$('l-user').value.trim(), password:$('l-pass').value});
+    if(r.error){ toast(r.error,'error'); return; }
+    token = r.token; localStorage.setItem('ax_token',token); me = r.user; startApp();
+  }catch{ toast('Lỗi kết nối','error'); }
+  finally{ btn.disabled=false; btn.textContent='Đăng nhập'; }
 }
 async function doRegister(){
   try{
-    const r=await api('POST','/api/auth/register',{username:$('r-user').value.trim(),password:$('r-pass').value,displayName:$('r-display').value.trim()});
-    if(r.error){toast(r.error,'error');return;}
-    token=r.token;localStorage.setItem('ax_token',token);me=r.user;startApp();
-  }catch{toast('Lỗi kết nối','error');}
+    const r = await api('POST','/api/auth/register',{username:$('r-user').value.trim(), password:$('r-pass').value, displayName:$('r-display').value.trim()});
+    if(r.error){ toast(r.error,'error'); return; }
+    token = r.token; localStorage.setItem('ax_token',token); me = r.user; startApp();
+  }catch{ toast('Lỗi kết nối','error'); }
 }
 async function autoLogin(){
-  const uuid=new URLSearchParams(location.search).get('uuid');
+  // UUID login từ query param (từ Mindustry /webchat)
+  const uuid = new URLSearchParams(location.search).get('uuid');
   if(uuid){
-    const r=await api('POST','/api/auth/uuid',{uuid});
-    if(!r.error){token=r.token;localStorage.setItem('ax_token',token);me=r.user;startApp();return;}
+    const r = await api('POST','/api/auth/uuid',{uuid});
+    if(!r.error){ token=r.token; localStorage.setItem('ax_token',token); me=r.user; startApp(); return; }
   }
   if(token){
-    try{const r=await api('GET','/api/auth/me');if(r._id){me=r;startApp();return;}}catch{}
-    token='';localStorage.removeItem('ax_token');
+    try{
+      const r = await api('GET','/api/auth/me');
+      if(r._id){ me=r; startApp(); return; }
+    }catch{}
+    token=''; localStorage.removeItem('ax_token');
   }
   $('auth-screen').style.display='flex';
 }
 
-// ── APP START ──
+// ══════════════════════════════════════════════════════
+//  APP START
+// ══════════════════════════════════════════════════════
 function startApp(){
   $('auth-screen').style.display='none';
   $('app').style.display='flex';
-  initSocket();loadFeed();updateMyUI();loadConvList();loadGameMsgs();
-  setInterval(loadOnlineCount,15000);loadOnlineCount();
+  initSocket();
+  loadFeed();
+  updateMyUI();
+  buildSidebarChat(); // xây sidebar chat với Global + search
+  setInterval(loadOnlineCount, 15000);
+  loadOnlineCount();
 }
 function updateMyUI(){
-  if(!me)return;
-  const name=me.displayName||me.username;
-  $('prof-name').textContent=name;
-  $('prof-un').textContent='@'+me.username;
-  $('prof-bio').textContent=me.bio||'';
-  const avEl=$('my-av');
-  if(me.avatar){avEl.innerHTML=`<img src="${me.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;}
-  else{avEl.textContent=name[0].toUpperCase();document.querySelector('.prof-av-wrap').style.background=avBg(me);}
-  const tb=$('tb-av');
-  if(me.avatar)tb.innerHTML=`<img src="${me.avatar}" style="width:34px;height:34px;object-fit:cover;border-radius:50%">`;
-  else{tb.textContent=name[0].toUpperCase();tb.style.background=avBg(me);}
-  const ca=$('comp-av');ca.style.background=avBg(me);
-  ca.innerHTML=me.avatar?`<img src="${me.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:`<span style="font-size:13px;font-weight:700">${name[0].toUpperCase()}</span>`;
+  if(!me) return;
+  const name = me.displayName || me.username;
+  $('prof-name').textContent = name;
+  $('prof-un').textContent   = '@'+me.username;
+  $('prof-bio').textContent  = me.bio || '';
+  const avEl = $('my-av');
+  if(me.avatar){ avEl.innerHTML=`<img src="${me.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; }
+  else{ avEl.textContent=name[0].toUpperCase(); document.querySelector('.prof-av-wrap').style.background=avBg(me); }
+  const tb = $('tb-av');
+  if(me.avatar) tb.innerHTML=`<img src="${me.avatar}" style="width:34px;height:34px;object-fit:cover;border-radius:50%">`;
+  else{ tb.textContent=name[0].toUpperCase(); tb.style.background=avBg(me); }
+  const ca = $('comp-av'); ca.style.background=avBg(me);
+  ca.innerHTML = me.avatar
+    ? `<img src="${me.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    : `<span style="font-size:13px;font-weight:700">${name[0].toUpperCase()}</span>`;
 }
 
-// ── SOCKET ──
+// ══════════════════════════════════════════════════════
+//  SOCKET
+// ══════════════════════════════════════════════════════
 function initSocket(){
-  socket=io();
-  socket.emit('auth',token);
+  socket = io();
+  socket.emit('auth', token);
   socket.emit('join_room','global');
-  socket.on('new_message',msg=>{
-    if(msg.roomId===curRoom)appendMessage(msg,$('chat-msgs'));
-    if(msg.roomId==='global')appendMessage(msg,$('game-msgs'));
+
+  socket.on('new_message', msg => {
+    // Chỉ render nếu đang ở đúng room
+    if(msg.roomId === curRoom){
+      appendMessage(msg, $('chat-msgs'));
+    }
   });
-  socket.on('new_post',post=>{if(curTab==='feed')prependPost(post);});
-  socket.on('post_liked',({postId,likes})=>{
-    const b=document.querySelector(`[data-like="${postId}"]`);
-    if(b)b.innerHTML=`❤️ ${likes}`;
+
+  socket.on('new_post', post => { if(curTab==='feed') prependPost(post); });
+
+  socket.on('post_liked', ({postId,likes}) => {
+    const b = document.querySelector(`[data-like="${postId}"]`);
+    if(b) b.innerHTML=`❤️ ${likes}`;
   });
-  socket.on('post_commented',({postId,comment})=>{
-    const sec=document.querySelector(`[data-cmt="${postId}"]`);
-    if(sec)sec.insertBefore(buildCmt(comment),sec.querySelector('.cmt-in-row'));
+  socket.on('post_commented', ({postId,comment}) => {
+    const sec = document.querySelector(`[data-cmt="${postId}"]`);
+    if(sec) sec.insertBefore(buildCmt(comment), sec.querySelector('.cmt-in-row'));
   });
-  socket.on('user_online',()=>loadOnlineCount());
-  socket.on('user_offline',()=>loadOnlineCount());
+  socket.on('post_deleted', ({postId}) => document.querySelector(`[data-post="${postId}"]`)?.remove());
+  socket.on('user_online',  () => loadOnlineCount());
+  socket.on('user_offline', () => loadOnlineCount());
 }
 
-// ── TAB SWITCHING ──
+// ══════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ══════════════════════════════════════════════════════
 function switchTab(tab){
-  curTab=tab;
-  ['feed','chat','game','profile'].forEach(t=>{
-    const v=$(t+'-view'),n=$('nav-'+t);
-    if(v)v.style.display=t===tab?(t==='chat'||t==='game'?'flex':'block'):'none';
-    if(n)n.classList.toggle('active',t===tab);
+  curTab = tab;
+  // Ẩn tất cả views
+  ['feed','chat','profile'].forEach(t => {
+    const v = $(t+'-view'), n = $('nav-'+t);
+    if(v) v.style.display = 'none';
+    if(n) n.classList.toggle('active', t===tab);
   });
-  const titles={feed:'Feed',chat:'Messages',game:'🎮 Mindustry Chat',profile:'Profile'};
-  const subs={feed:'Bài đăng mới nhất',chat:'Tin nhắn',game:'Chat với game server',profile:'Hồ sơ cá nhân'};
-  $('tb-title').textContent=titles[tab];
-  $('tb-sub').textContent=subs[tab];
-  $('s-search-wrap').style.display=tab==='chat'?'block':'none';
-  if(tab==='profile')loadMyProfile();
-  if(tab==='chat')loadConvList();
-  if(tab==='game')loadGameMsgs();
-  if(window.innerWidth<=640)closeSidebar();
+  // Hiện view tương ứng
+  if(tab==='feed')    { $('feed-view').style.display='flex'; }
+  if(tab==='chat')    { $('chat-view').style.display='flex'; }
+  if(tab==='profile') { $('profile-view').style.display='block'; loadMyProfile(); }
+
+  // Sidebar search chỉ hiện khi chat
+  $('s-search-wrap').style.display = tab==='chat' ? 'block' : 'none';
+
+  // Topbar title
+  const titles = {feed:'Feed', chat:'Messages', profile:'Profile'};
+  const subs   = {feed:'Bài đăng mới nhất', chat:'Chọn phòng để bắt đầu', profile:'Hồ sơ cá nhân'};
+  $('tb-title').textContent = curRoomIsGlobal && tab==='chat' ? '🎮 Global Chat' : titles[tab];
+  $('tb-sub').textContent   = curRoomIsGlobal && tab==='chat' ? 'Kết nối với Mindustry' : subs[tab];
+
+  if(window.innerWidth<=640) closeSidebar();
 }
 
-// ── FEED ──
+// ══════════════════════════════════════════════════════
+//  SIDEBAR CHAT — Global + DM list
+// ══════════════════════════════════════════════════════
+function buildSidebarChat(){
+  const list = $('sidebar-list');
+  list.innerHTML = '';
+
+  // Global room
+  const globalEl = buildRoomItem({
+    id:'global', name:'🌐 #Global', sub:'Chat + Mindustry game server', icon:'🌐'
+  });
+  globalEl.dataset.room = 'global';
+  globalEl.onclick = () => { switchTab('chat'); openRoom('global','🎮 Global Chat','Kết nối với Mindustry',true); };
+  list.appendChild(globalEl);
+}
+
+function buildRoomItem({id,name,sub,icon,av}){
+  const el = document.createElement('div');
+  el.className='s-item'; el.dataset.room=id;
+  el.innerHTML=`
+    <div class="s-av" style="background:var(--blue)">
+      ${av ? `<img src="${av}">` : `<span style="font-size:13px">${icon||name[0]}</span>`}
+    </div>
+    <div class="s-info">
+      <div class="s-name">${esc(name)}</div>
+      <div class="s-sub">${esc(sub||'')}</div>
+    </div>`;
+  return el;
+}
+
+// ══════════════════════════════════════════════════════
+//  OPEN ROOM
+// ══════════════════════════════════════════════════════
+async function openRoom(roomId, title, subtitle, isGlobal=false){
+  curRoom = roomId;
+  curRoomIsGlobal = isGlobal;
+
+  socket?.emit('join_room', roomId);
+
+  // Highlight sidebar item
+  document.querySelectorAll('.s-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.room===roomId));
+
+  // Cập nhật topbar
+  $('tb-title').textContent = title;
+  $('tb-sub').textContent   = subtitle || '';
+
+  // Đổi màu nút send: xanh = global, đỏ = DM
+  const sendBtn = $('send-btn');
+  if(isGlobal){
+    sendBtn.classList.add('global');
+    $('chat-in').placeholder = '💬 Nhắn tin tới Global & Mindustry...';
+  } else {
+    sendBtn.classList.remove('global');
+    $('chat-in').placeholder = 'Nhắn tin...';
+  }
+
+  // Load messages
+  const msgs = $('chat-msgs');
+  msgs.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Đang tải...</div>';
+
+  const r = await api('GET', `/api/messages/${roomId}?limit=50`);
+  msgs.innerHTML = '';
+
+  // Banner nếu là Global
+  if(isGlobal){
+    const banner = document.createElement('div');
+    banner.className = 'global-banner';
+    banner.textContent = '🎮 Global Chat — kết nối với người chơi Mindustry & web app';
+    msgs.appendChild(banner);
+  }
+
+  if(Array.isArray(r)) r.forEach(m => appendMessage(m, msgs));
+  msgs.scrollTop = msgs.scrollHeight;
+
+  if(window.innerWidth<=640) closeSidebar();
+}
+
+// ══════════════════════════════════════════════════════
+//  APPEND MESSAGE
+// ══════════════════════════════════════════════════════
+function appendMessage(msg, container){
+  if(!container) return;
+  const isOwn  = msg.senderId === me?._id;
+  const isGame = msg.fromGame;
+  const displayText = msg.displayContent || msg.content || '';
+
+  const row = document.createElement('div');
+  row.className = 'msg-row' + (isOwn?' own':'') + (isGame?' game':'');
+
+  // Avatar
+  const av = document.createElement('div');
+  av.className = 'msg-av';
+  av.style.background = avBg({displayName:msg.senderName});
+  if(msg.senderAvatar) av.innerHTML=`<img src="${msg.senderAvatar}">`;
+  else av.textContent = (msg.senderName||'?')[0].toUpperCase();
+
+  // Group
+  const group = document.createElement('div');
+  group.className = 'msg-group';
+
+  // Sender name (chỉ hiện với tin của người khác)
+  if(!isOwn){
+    const sn = document.createElement('div');
+    sn.className = 'msg-sender';
+    sn.textContent = (msg.senderName||'?') + (isGame?' 🎮':'');
+    group.appendChild(sn);
+  }
+
+  // Bubble — dùng textContent để tránh bug chia ký tự
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = displayText;
+
+  // Meta
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = timeAgo(msg.createdAt || new Date());
+  if(isGame){
+    const tag = document.createElement('span');
+    tag.className='game-tag'; tag.textContent='GAME';
+    meta.appendChild(tag);
+  }
+  if(msg.isTranslated){
+    const hint = document.createElement('span');
+    hint.className='trans-hint'; hint.textContent='(đã dịch)';
+    meta.appendChild(hint);
+  }
+
+  group.appendChild(bubble);
+  group.appendChild(meta);
+
+  if(isOwn){ row.appendChild(group); }
+  else      { row.appendChild(av); row.appendChild(group); }
+
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
+}
+
+// ══════════════════════════════════════════════════════
+//  SEND MESSAGE (1 hàm duy nhất cho cả DM và Global)
+// ══════════════════════════════════════════════════════
+function sendMsg(){
+  const inp = $('chat-in');
+  const content = inp.value.trim();
+  if(!content || !curRoom){
+    if(!curRoom) toast('Chọn phòng chat trước!','error');
+    return;
+  }
+  socket?.emit('send_message', {roomId: curRoom, content, token});
+  inp.value = '';
+  inp.style.height = 'auto';
+}
+
+// ══════════════════════════════════════════════════════
+//  FEED
+// ══════════════════════════════════════════════════════
 async function loadFeed(){
-  const r=await api('GET','/api/posts?page=1');
-  if(!Array.isArray(r))return;
-  const list=$('posts-list'); list.innerHTML='';
-  r.forEach(p=>list.appendChild(buildPost(p)));
+  const r = await api('GET','/api/posts?page=1');
+  if(!Array.isArray(r)) return;
+  const list = $('posts-list'); list.innerHTML='';
+  r.forEach(p => list.appendChild(buildPost(p)));
 }
 function buildPost(post){
-  const div=document.createElement('div');
+  const div = document.createElement('div');
   div.className='post-card'; div.dataset.post=post._id;
-  const liked=post.likes?.includes(me?._id);
-  const gb=post.fromGame?'<span class="game-badge">GAME</span>':'';
-  const displayContent=post.displayContent||post.content;
-  const transBadge=post.isTranslated?`<span style="font-size:9px;color:var(--muted);font-style:italic"> (đã dịch)</span>`:'';
+  const liked = post.likes?.includes(me?._id);
+  const gb    = post.fromGame ? '<span class="game-badge">GAME</span>' : '';
+  const displayContent = post.displayContent || post.content;
+  const transBadge = post.isTranslated
+    ? `<span style="font-size:9px;color:var(--muted);font-style:italic"> (đã dịch)</span>` : '';
   div.innerHTML=`
     <div class="post-hdr">
       <div class="s-av" style="background:${avBg({displayName:post.authorName})}">
-        ${post.authorAvatar?`<img src="${post.authorAvatar}">`:`<span style="font-size:12px;font-weight:700">${(post.authorName||'?')[0].toUpperCase()}</span>`}
+        ${post.authorAvatar
+          ? `<img src="${post.authorAvatar}">`
+          : `<span style="font-size:12px;font-weight:700">${(post.authorName||'?')[0].toUpperCase()}</span>`}
       </div>
-      <div><div class="post-author">${esc(post.authorName||'?')}${gb}${transBadge}</div><div style="font-size:10px;color:var(--muted)">${timeAgo(post.createdAt)}</div></div>
-      ${post.authorId===me?._id?`<button class="icon-btn" style="margin-left:auto;width:28px;height:28px" onclick="delPost('${post._id}')">🗑</button>`:''}
+      <div>
+        <div class="post-author">${esc(post.authorName||'?')}${gb}${transBadge}</div>
+        <div style="font-size:10px;color:var(--muted)">${timeAgo(post.createdAt)}</div>
+      </div>
+      ${post.authorId===me?._id
+        ? `<button class="icon-btn" style="margin-left:auto;width:28px;height:28px" onclick="delPost('${post._id}')">🗑</button>` : ''}
     </div>
     <div class="post-body">${esc(displayContent)}</div>
-    ${post.image?`<img class="post-img" src="${post.image}" loading="lazy">`:''}
+    ${post.image ? `<img class="post-img" src="${post.image}" loading="lazy">` : ''}
     <div class="post-actions">
       <button class="act-btn ${liked?'liked':''}" data-like="${post._id}" onclick="likePost('${post._id}',this)">❤️ ${post.likes?.length||0}</button>
       <button class="act-btn" onclick="toggleCmt('${post._id}')">💬 ${post.comments?.length||0}</button>
@@ -580,8 +769,7 @@ function buildCmt(c){
 }
 function prependPost(post){
   const list=$('posts-list');
-  const el=buildPost(post);
-  list.insertBefore(el,list.firstChild);
+  list.insertBefore(buildPost(post), list.firstChild);
 }
 async function submitPost(){
   const content=$('post-in').value.trim();
@@ -611,7 +799,7 @@ async function likePost(id,btn){
 }
 function toggleCmt(id){
   const s=$(`cmt-${id}`);
-  if(s)s.style.display=s.style.display==='none'?'block':'none';
+  if(s) s.style.display=s.style.display==='none'?'block':'none';
 }
 async function submitCmt(postId,inp){
   if(!inp.value.trim())return;
@@ -625,107 +813,33 @@ async function delPost(id){
   if(r.success){document.querySelector(`[data-post="${id}"]`)?.remove();toast('Đã xóa');}
 }
 
-// ── CHAT ──
-async function loadConvList(){
-  const list=$('sidebar-list'); list.innerHTML='';
-  const el=buildRoomItem({id:'global',name:'#Global',sub:'Chat chung',icon:'🌐'});
-  el.onclick=()=>{openRoom('global','#Global Chat',null);};
-  list.appendChild(el);
-  if(curRoom==='global')el.classList.add('active');
-}
-function buildRoomItem({id,name,sub,icon,av}){
-  const el=document.createElement('div');
-  el.className='s-item'; el.dataset.room=id;
-  el.innerHTML=`
-    <div class="s-av" style="background:var(--border)">
-      ${av?`<img src="${av}">`:`<span>${icon||name[0]}</span>`}
-    </div>
-    <div class="s-info"><div class="s-name">${esc(name)}</div><div class="s-sub">${esc(sub||'')}</div></div>`;
-  return el;
-}
-async function openRoom(roomId,name,userInfo){
-  curRoom=roomId;
-  socket?.emit('join_room',roomId);
-  document.querySelectorAll('.s-item').forEach(el=>el.classList.toggle('active',el.dataset.room===roomId));
-  $('tb-title').textContent=name;
-  $('tb-sub').textContent=userInfo?.isGameAccount?'🎮 Game Account':'Đang trò chuyện';
-  const msgs=$('chat-msgs'); msgs.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Đang tải...</div>';
-  const r=await api('GET',`/api/messages/${roomId}?limit=50`);
-  msgs.innerHTML='';
-  if(Array.isArray(r))r.forEach(m=>appendMessage(m,msgs));
-  msgs.scrollTop=msgs.scrollHeight;
-  if(window.innerWidth<=640)closeSidebar();
+// ══════════════════════════════════════════════════════
+//  SEARCH người dùng (DM)
+// ══════════════════════════════════════════════════════
+async function onSearch(q){
+  const list=$('sidebar-list');
+  if(!q.trim()){ buildSidebarChat(); return; }
+  const r=await api('GET',`/api/users/search?q=${encodeURIComponent(q)}`);
+  list.innerHTML='';
+  if(!Array.isArray(r)) return;
+  // Luôn giữ Global ở đầu
+  const globalEl=buildRoomItem({id:'global',name:'🌐 #Global',sub:'Chat + Mindustry',icon:'🌐'});
+  globalEl.onclick=()=>{ switchTab('chat'); openRoom('global','🎮 Global Chat','Kết nối với Mindustry',true); };
+  list.appendChild(globalEl);
+
+  r.filter(u=>u._id!==me?._id).forEach(u=>{
+    const el=buildRoomItem({id:u._id, name:u.displayName||u.username, sub:'@'+u.username, av:u.avatar});
+    el.onclick=()=>{
+      switchTab('chat');
+      openRoom([me._id,u._id].sort().join('_'), u.displayName||u.username, '@'+u.username, false);
+    };
+    list.appendChild(el);
+  });
 }
 
-// ── APPEND MESSAGE (fix bug mỗi chữ 1 dòng) ──
-function appendMessage(msg, container){
-  if(!container)return;
-  const isOwn =msg.senderId===me?._id;
-  const isGame=msg.fromGame;
-  // Nội dung hiển thị — ưu tiên displayContent, sau đó content
-  const displayText = msg.displayContent || msg.content || '';
-  const row=document.createElement('div');
-  row.className='msg-row'+(isOwn?' own':'')+(isGame?' game':'');
-  // Avatar
-  const av=document.createElement('div');
-  av.className='msg-av';
-  av.style.background=avBg({displayName:msg.senderName});
-  if(msg.senderAvatar) av.innerHTML=`<img src="${msg.senderAvatar}">`;
-  else av.textContent=(msg.senderName||'?')[0].toUpperCase();
-  // Group
-  const group=document.createElement('div');
-  group.className='msg-group';
-  // Sender name (only for non-own)
-  if(!isOwn){
-    const sn=document.createElement('div');
-    sn.className='msg-sender';
-    sn.textContent=(msg.senderName||'?')+(isGame?' 🎮':'');
-    group.appendChild(sn);
-  }
-  // Bubble — dùng textContent để tránh bug chia ký tự
-  const bubble=document.createElement('div');
-  bubble.className='msg-bubble';
-  bubble.textContent=displayText; // KHÔNG dùng innerHTML, KHÔNG split
-  // Meta
-  const meta=document.createElement('div');
-  meta.className='msg-meta';
-  meta.textContent=timeAgo(msg.createdAt||new Date());
-  if(msg.isTranslated){
-    const hint=document.createElement('span');
-    hint.className='trans-hint';
-    hint.textContent='(đã dịch)';
-    meta.appendChild(hint);
-  }
-  group.appendChild(bubble);
-  group.appendChild(meta);
-  if(isOwn){row.appendChild(group);}
-  else{row.appendChild(av);row.appendChild(group);}
-  container.appendChild(row);
-  container.scrollTop=container.scrollHeight;
-}
-
-function sendMsg(){
-  const inp=$('chat-in'), content=inp.value.trim();
-  if(!content)return;
-  socket?.emit('send_message',{roomId:curRoom,content,token});
-  inp.value=''; inp.style.height='auto';
-}
-
-// ── GAME CHAT ──
-async function loadGameMsgs(){
-  const r=await api('GET','/api/messages/global?limit=50');
-  const c=$('game-msgs'); c.innerHTML='';
-  if(Array.isArray(r))r.forEach(m=>appendMessage(m,c));
-  c.scrollTop=c.scrollHeight;
-}
-function sendGameMsg(){
-  const inp=$('game-in'), content=inp.value.trim();
-  if(!content)return;
-  socket?.emit('send_message',{roomId:'global',content,token});
-  inp.value=''; inp.style.height='auto';
-}
-
-// ── PROFILE ──
+// ══════════════════════════════════════════════════════
+//  PROFILE
+// ══════════════════════════════════════════════════════
 async function loadMyProfile(){
   const r=await api('GET',`/api/profile/${me._id}`);
   if(r.user){me={...me,...r.user};updateMyUI();}
@@ -749,37 +863,32 @@ function changeAv(){
     reader.onload=async ev=>{
       const r=await api('PUT','/api/profile',{avatar:ev.target.result});
       if(r.error){toast(r.error,'error');return;}
-      me.avatar=ev.target.result; updateMyUI(); toast('Đã đổi ảnh!');
+      me.avatar=ev.target.result;updateMyUI();toast('Đã đổi ảnh!');
     };
     reader.readAsDataURL(e.target.files[0]);
   };
   inp.click();
 }
 
-// ── SEARCH ──
-async function onSearch(q){
-  if(!q.trim()){loadConvList();return;}
-  const r=await api('GET',`/api/users/search?q=${encodeURIComponent(q)}`);
-  const list=$('sidebar-list'); list.innerHTML='';
-  if(!Array.isArray(r))return;
-  r.filter(u=>u._id!==me?._id).forEach(u=>{
-    const el=buildRoomItem({id:u._id,name:u.displayName||u.username,sub:'@'+u.username,av:u.avatar});
-    el.onclick=()=>{switchTab('chat');openRoom([me._id,u._id].sort().join('_'),u.displayName||u.username,u);};
-    list.appendChild(el);
-  });
-}
-
-// ── ONLINE COUNT ──
+// ══════════════════════════════════════════════════════
+//  ONLINE COUNT
+// ══════════════════════════════════════════════════════
 async function loadOnlineCount(){
   const r=await api('GET','/api/game/online');
   $('online-count').textContent=(r.count||0)+' online';
 }
 
-// ── MODAL ──
-function closeModal(id){$(id).classList.remove('open');}
-document.addEventListener('click',e=>{if(e.target.classList.contains('modal-ov'))e.target.classList.remove('open');});
+// ══════════════════════════════════════════════════════
+//  MODAL
+// ══════════════════════════════════════════════════════
+function closeModal(id){ $(id).classList.remove('open'); }
+document.addEventListener('click', e=>{
+  if(e.target.classList.contains('modal-ov')) e.target.classList.remove('open');
+});
 
-// ── INIT ──
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
 autoLogin();
 </script>
 </body>
