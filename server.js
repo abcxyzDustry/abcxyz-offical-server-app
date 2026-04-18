@@ -7,6 +7,7 @@ const jwt        = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const path       = require('path');
 const https      = require('https');
+const fs         = require('fs');
 require('dotenv').config();
 
 const app    = express();
@@ -17,23 +18,57 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-const MONGO_URI  = process.env.MONGO_URI  || 'mongodb://localhost:27017/craborchat';
-const JWT_SECRET = process.env.JWT_SECRET || 'craborchat_secret_2024';
+const MONGO_URI  = process.env.MONGO_URI  || 'mongodb://localhost:27017/abcxyzchat';
+const JWT_SECRET = process.env.JWT_SECRET || 'abcxyz_secret_2024';
 const PORT       = process.env.PORT       || 3000;
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ abcxyz-offical-server-chat: MongoDB connected'))
+  .then(() => console.log('✅ MongoDB connected'))
   .catch(e => console.error('MongoDB error:', e));
 
 // =========================================================================
-//  TRANSLATION ENGINE (port từ ChatTranslation.java)
+//  MUSIC ASSETS — serve từ assets/music/
 // =========================================================================
-const translationCache = new Map(); // "text::lang" -> translated
+const MUSIC_DIR   = path.join(__dirname, 'assets', 'music');
+const MUSIC_EXTS  = ['.mp3', '.ogg', '.wav', '.flac', '.aac', '.m4a', '.opus'];
+const MUSIC_MIME  = {
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+  '.flac': 'audio/flac', '.aac': 'audio/aac', '.m4a': 'audio/mp4',
+  '.opus': 'audio/ogg; codecs=opus'
+};
+
+if (!fs.existsSync(MUSIC_DIR)) {
+  fs.mkdirSync(MUSIC_DIR, { recursive: true });
+  console.log('📁 Created assets/music/ — bỏ file nhạc vào đây');
+}
+
+function getMusicList() {
+  try {
+    return fs.readdirSync(MUSIC_DIR)
+      .filter(f => MUSIC_EXTS.includes(path.extname(f).toLowerCase()))
+      .map((f, i) => {
+        const ext  = path.extname(f).toLowerCase();
+        const stat = fs.statSync(path.join(MUSIC_DIR, f));
+        return {
+          id:       i,
+          filename: f,
+          name:     path.basename(f, ext),
+          ext,
+          size:     stat.size,
+          mime:     MUSIC_MIME[ext] || 'audio/mpeg',
+          url:      `/api/music/stream/${encodeURIComponent(f)}`
+        };
+      });
+  } catch { return []; }
+}
+
+// =========================================================================
+//  TRANSLATION ENGINE
+// =========================================================================
+const translationCache = new Map();
 const MAX_CACHE = 10000;
 
-function getCached(text, lang) {
-  return translationCache.get(text + '::' + lang) || null;
-}
+function getCached(text, lang) { return translationCache.get(text + '::' + lang) || null; }
 function setCache(text, lang, translated) {
   if (translationCache.size > MAX_CACHE) {
     const first = translationCache.keys().next().value;
@@ -42,39 +77,26 @@ function setCache(text, lang, translated) {
   translationCache.set(text + '::' + lang, translated);
 }
 
-/** Google Translate free API — giống ChatTranslation.java */
 function translateText(text, targetLang, sourceLang) {
   return new Promise((resolve) => {
-    if (!text || !text.trim() || text.length < 2) return resolve(null);
-    if (text.length > 1000) return resolve(null);
-
-    const sl   = sourceLang || 'auto';
-    const q    = encodeURIComponent(text);
-    const url  = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${targetLang}&dt=t&q=${q}`;
-
+    if (!text || !text.trim() || text.length < 2 || text.length > 1000) return resolve(null);
+    const sl  = sourceLang || 'auto';
+    const q   = encodeURIComponent(text);
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${targetLang}&dt=t&q=${q}`;
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
       res.on('data', d => data += d);
       res.on('end', () => {
         try {
-          // Parse giống parseGoogleTranslateResponse trong ChatTranslation.java
           const start = data.indexOf('[[[\"') + 4;
           if (start < 4) return resolve(null);
           const end = data.indexOf('"', start);
           if (end <= start) return resolve(null);
-
-          let translated = data.substring(start, end);
-          // Unescape JSON
-          translated = translated
+          let translated = data.substring(start, end)
             .replace(/\\n/g, '\n').replace(/\\"/g, '"')
-            .replace(/\\\\/g, '\\').replace(/\\/g, '/');
-          // Decode unicode escapes
-          translated = translated.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
-            String.fromCharCode(parseInt(hex, 16)));
-
-          if (!translated || translated === text || translated.length > text.length * 5)
-            return resolve(null);
-
+            .replace(/\\\\/g, '\\').replace(/\\/g, '/')
+            .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+          if (!translated || translated === text || translated.length > text.length * 5) return resolve(null);
           resolve(translated);
         } catch { resolve(null); }
       });
@@ -82,60 +104,39 @@ function translateText(text, targetLang, sourceLang) {
   });
 }
 
-/** Detect ngon ngu tu IP bang ip-api.com (mien phi, khong can key) */
 async function detectLangFromIP(ip) {
-  // Fallback map quoc gia -> ngon ngu
   const countryLang = {
-    VN:'vi', US:'en', GB:'en', AU:'en', CA:'en',
-    JP:'ja', KR:'ko', CN:'zh', TW:'zh-TW',
-    FR:'fr', DE:'de', ES:'es', IT:'it', PT:'pt',
-    RU:'ru', PL:'pl', NL:'nl', SE:'sv', NO:'no',
-    TH:'th', ID:'id', MY:'ms', PH:'fil',
-    SA:'ar', AE:'ar', EG:'ar', TR:'tr',
-    IN:'hi', BD:'bn', PK:'ur', BR:'pt',
-    MX:'es', AR:'es', CO:'es', PE:'es',
+    VN:'vi', US:'en', GB:'en', AU:'en', CA:'en', JP:'ja', KR:'ko',
+    CN:'zh', TW:'zh-TW', FR:'fr', DE:'de', ES:'es', IT:'it', PT:'pt',
+    RU:'ru', PL:'pl', NL:'nl', TH:'th', ID:'id', MY:'ms', PH:'fil',
+    SA:'ar', AE:'ar', TR:'tr', IN:'hi', BD:'bn', BR:'pt',
   };
-
-  // Bo qua localhost / private IP
   if (!ip || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168') || ip.startsWith('10.'))
-    return 'en';
-
+    return 'vi';
   return new Promise(resolve => {
     https.get(`https://ip-api.com/json/${ip}?fields=countryCode`, res => {
       let d = '';
       res.on('data', c => d += c);
       res.on('end', () => {
-        try {
-          const j = JSON.parse(d);
-          resolve(countryLang[j.countryCode] || 'en');
-        } catch { resolve('en'); }
+        try { resolve(countryLang[JSON.parse(d).countryCode] || 'en'); }
+        catch { resolve('en'); }
       });
     }).on('error', () => resolve('en'));
   });
 }
 
-/** Dich tin nhan sang tat ca ngon ngu dang online */
 async function translateForAllUsers(text, sourceLang, excludeUserId) {
-  const results = {}; // lang -> translated
+  const results = {};
   const needed  = new Set();
-
-  // Lay danh sach ngon ngu can dich
   for (const [uid, info] of onlineUsers.entries()) {
     if (uid === excludeUserId) continue;
     if (info.lang && info.lang !== sourceLang) needed.add(info.lang);
   }
-
   for (const lang of needed) {
     const cached = getCached(text, lang);
-    if (cached) {
-      results[lang] = cached;
-    } else {
-      const translated = await translateText(text, lang, sourceLang);
-      if (translated) {
-        setCache(text, lang, translated);
-        results[lang] = translated;
-      }
-    }
+    if (cached) { results[lang] = cached; continue; }
+    const translated = await translateText(text, lang, sourceLang);
+    if (translated) { setCache(text, lang, translated); results[lang] = translated; }
   }
   return results;
 }
@@ -144,19 +145,19 @@ async function translateForAllUsers(text, sourceLang, excludeUserId) {
 //  SCHEMAS
 // =========================================================================
 const userSchema = new mongoose.Schema({
-  username:    { type: String, unique: true, required: true },
-  uuid:        { type: String, unique: true, sparse: true },
-  password:    String,
-  displayName: { type: String, default: '' },
-  avatar:      { type: String, default: '' },
-  bio:         { type: String, default: '' },
-  lang:        { type: String, default: 'en' }, // ngon ngu mac dinh
+  username:      { type: String, unique: true, required: true },
+  uuid:          { type: String, unique: true, sparse: true },
+  password:      String,
+  displayName:   { type: String, default: '' },
+  avatar:        { type: String, default: '' },
+  bio:           { type: String, default: '' },
+  lang:          { type: String, default: 'vi' },
   isGameAccount: { type: Boolean, default: false },
-  isOnline:    { type: Boolean, default: false },
-  lastSeen:    { type: Date, default: Date.now },
-  isAdmin:     { type: Boolean, default: false },
-  status:      { type: String, default: 'active' },
-  createdAt:   { type: Date, default: Date.now }
+  isOnline:      { type: Boolean, default: false },
+  lastSeen:      { type: Date, default: Date.now },
+  isAdmin:       { type: Boolean, default: false },
+  status:        { type: String, default: 'active' },
+  createdAt:     { type: Date, default: Date.now }
 });
 
 const postSchema = new mongoose.Schema({
@@ -164,8 +165,8 @@ const postSchema = new mongoose.Schema({
   authorName:   String,
   authorAvatar: String,
   content:      { type: String, required: true },
-  originalLang: { type: String, default: 'en' },
-  translations: { type: Map, of: String, default: {} }, // {vi: '...', ja: '...'}
+  originalLang: { type: String, default: 'vi' },
+  translations: { type: Map, of: String, default: {} },
   image:        String,
   likes:        [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   comments: [{
@@ -176,7 +177,7 @@ const postSchema = new mongoose.Schema({
     translations: { type: Map, of: String, default: {} },
     createdAt:    { type: Date, default: Date.now }
   }],
-  fromGame: { type: Boolean, default: false },
+  fromGame:  { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -186,7 +187,7 @@ const messageSchema = new mongoose.Schema({
   senderName:   String,
   senderAvatar: String,
   content:      { type: String, required: true },
-  originalLang: { type: String, default: 'en' },
+  originalLang: { type: String, default: 'vi' },
   translations: { type: Map, of: String, default: {} },
   fromGame:     { type: Boolean, default: false },
   createdAt:    { type: Date, default: Date.now }
@@ -206,29 +207,42 @@ const auth = (req, res, next) => {
   catch { res.status(401).json({ error: 'Invalid token' }); }
 };
 
-// Lay IP that (ho tro proxy / Render.com)
+const adminAuth = async (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    const d = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(d.id);
+    if (!user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+    req.user = d; next();
+  } catch { res.status(401).json({ error: 'Invalid token' }); }
+};
+
 function getRealIP(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim()
       || req.headers['x-real-ip']
       || req.connection?.remoteAddress
-      || req.ip
-      || '127.0.0.1';
+      || req.ip || '127.0.0.1';
+}
+
+function sanitize(user) {
+  const u = user.toObject ? user.toObject() : { ...user };
+  delete u.password;
+  return u;
 }
 
 // =========================================================================
-//  ONLINE USERS: uid -> { socketId, lang, username }
+//  ONLINE USERS
 // =========================================================================
-const onlineUsers = new Map();
+const onlineUsers = new Map(); // uid -> { socketId, lang, username }
 
 // =========================================================================
 //  SOCKET.IO
 // =========================================================================
 io.on('connection', async socket => {
-  // Detect ngon ngu tu IP ngay khi connect
-  const clientIP   = socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim()
-                  || socket.handshake.address;
-  const detectedLang = await detectLangFromIP(clientIP);
-  socket.detectedLang = detectedLang;
+  const clientIP = socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim()
+                || socket.handshake.address;
+  socket.detectedLang = await detectLangFromIP(clientIP);
 
   socket.on('auth', async token => {
     try {
@@ -236,15 +250,13 @@ io.on('connection', async socket => {
       socket.userId = d.id;
       socket.join(d.id);
       socket.join('global');
-      const user = await User.findByIdAndUpdate(d.id,
-        { isOnline: true, lastSeen: new Date() }, { new: true });
-      const lang = user?.lang || socket.detectedLang || 'en';
+      const user = await User.findByIdAndUpdate(d.id, { isOnline: true, lastSeen: new Date() }, { new: true });
+      const lang = user?.lang || socket.detectedLang || 'vi';
       onlineUsers.set(d.id, { socketId: socket.id, lang, username: user?.username });
       io.emit('user_online', { userId: d.id });
     } catch {}
   });
 
-  // Client bao ngon ngu (khi doi setting)
   socket.on('set_lang', async ({ lang, token }) => {
     try {
       const d = jwt.verify(token, JWT_SECRET);
@@ -261,7 +273,9 @@ io.on('connection', async socket => {
       const user = await User.findById(d.id);
       if (!user) return;
 
-      const senderLang  = user.lang || socket.detectedLang || 'en';
+      const senderLang   = user.lang || socket.detectedLang || 'vi';
+      // Chỉ dịch khi gửi từ web → client (web→game)
+      // Client→client KHÔNG dịch ở đây, client tự hiển thị ngôn ngữ gốc
       const translations = await translateForAllUsers(content, senderLang, d.id);
 
       const msg = await Message.create({
@@ -270,20 +284,18 @@ io.on('connection', async socket => {
         senderAvatar: user.avatar || '',
         originalLang: senderLang,
         translations,
-        toGame: roomId === 'global'
       });
 
-      // Phat tung nguoi dung ban dich rieng
+      // Phát bản dịch riêng cho từng user
       for (const [uid, info] of onlineUsers.entries()) {
         const sock = io.sockets.sockets.get(info.socketId);
         if (!sock) continue;
-        const myLang    = info.lang || 'en';
-        const showText  = uid === d.id ? content
-                        : (translations[myLang] || content);
-        const isTranslated = uid !== d.id && !!translations[myLang];
-
+        const myLang      = info.lang || 'vi';
+        const showText    = uid === d.id ? content : (translations[myLang] || content);
+        const isTranslated = uid !== d.id && !!translations[myLang] && senderLang !== myLang;
         sock.emit('new_message', {
           _id: msg._id, roomId, content: showText,
+          displayContent: showText,
           originalContent: content,
           originalLang: senderLang,
           isTranslated,
@@ -293,19 +305,6 @@ io.on('connection', async socket => {
           fromGame: false,
           createdAt: msg.createdAt
         });
-      }
-
-      // Cap nhat conversation
-      if (roomId !== 'global') {
-        const parts = roomId.split('_');
-        if (parts.length === 2)
-          await mongoose.model('Conversation', new mongoose.Schema({
-            participants: [String], lastMessage: String, lastAt: Date
-          }, { strict: false })).findOneAndUpdate(
-            { participants: { $all: parts } },
-            { lastMessage: content, lastAt: new Date() },
-            { upsert: true }
-          ).catch(() => {});
       }
     } catch(e) { console.error('send_message:', e.message); }
   });
@@ -320,16 +319,15 @@ io.on('connection', async socket => {
 });
 
 // =========================================================================
-//  AUTH
+//  AUTH ROUTES
 // =========================================================================
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, password, displayName } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
-    if (username.length < 3) return res.status(400).json({ error: 'Username >= 3 ky tu' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password >= 6 ky tu' });
-    if (await User.findOne({ username })) return res.status(400).json({ error: 'Username da ton tai' });
-    // Detect lang tu IP
+    if (!username || !password)        return res.status(400).json({ error: 'Missing fields' });
+    if (username.length < 3)           return res.status(400).json({ error: 'Username >= 3 ký tự' });
+    if (password.length < 6)           return res.status(400).json({ error: 'Password >= 6 ký tự' });
+    if (await User.findOne({ username })) return res.status(400).json({ error: 'Username đã tồn tại' });
     const ip   = getRealIP(req);
     const lang = await detectLangFromIP(ip);
     const hash = await bcrypt.hash(password, 10);
@@ -343,9 +341,8 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     const user = await User.findOne({ username });
-    if (!user) return res.status(400).json({ error: 'Sai tai khoan/mat khau' });
-    if (!await bcrypt.compare(password, user.password)) return res.status(400).json({ error: 'Sai mat khau' });
-    // Update lang tu IP
+    if (!user)                                  return res.status(400).json({ error: 'Sai tài khoản/mật khẩu' });
+    if (!await bcrypt.compare(password, user.password)) return res.status(400).json({ error: 'Sai mật khẩu' });
     const ip   = getRealIP(req);
     const lang = await detectLangFromIP(ip);
     await User.findByIdAndUpdate(user._id, { lang });
@@ -354,7 +351,7 @@ app.post('/api/auth/login', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Dang nhap bang Mindustry UUID
+// UUID login (từ Mindustry /webchat)
 app.post('/api/auth/uuid', async (req, res) => {
   try {
     const { uuid, username } = req.body;
@@ -395,7 +392,6 @@ app.put('/api/profile', auth, async (req, res) => {
     if (avatar !== undefined)      update.avatar      = avatar;
     if (lang !== undefined)        update.lang        = lang;
     const user = await User.findByIdAndUpdate(req.user.id, update, { new: true }).select('-password');
-    // Sync lang vao onlineUsers
     if (lang && onlineUsers.has(req.user.id)) onlineUsers.get(req.user.id).lang = lang;
     res.json(user);
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -426,10 +422,9 @@ app.get('/api/users/search', auth, async (req, res) => {
 // =========================================================================
 app.get('/api/posts', auth, async (req, res) => {
   try {
-    const myLang = (await User.findById(req.user.id))?.lang || 'en';
+    const myLang = (await User.findById(req.user.id))?.lang || 'vi';
     const page   = parseInt(req.query.page) || 1;
     const posts  = await Post.find().sort({ createdAt: -1 }).skip((page-1)*20).limit(20);
-    // Tra ve ban dich theo ngon ngu nguoi doc
     const result = posts.map(p => ({
       ...p.toObject(),
       displayContent: p.translations?.get?.(myLang) || p.content,
@@ -444,23 +439,18 @@ app.post('/api/posts', auth, async (req, res) => {
     const { content, image } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
     const user       = await User.findById(req.user.id);
-    const authorLang = user?.lang || 'en';
-
-    // Dich sang cac ngon ngu online
+    const authorLang = user?.lang || 'vi';
     const translations = await translateForAllUsers(content, authorLang, req.user.id);
-
     const post = await Post.create({
       authorId: req.user.id, authorName: user.displayName || user.username,
       authorAvatar: user.avatar || '', content: content.trim(),
       originalLang: authorLang, translations, image: image || ''
     });
-
-    // Phat cho tung user ban dich rieng
     for (const [uid, info] of onlineUsers.entries()) {
-      const sock     = io.sockets.sockets.get(info.socketId);
+      const sock    = io.sockets.sockets.get(info.socketId);
       if (!sock) continue;
-      const myLang   = info.lang || 'en';
-      const display  = translations[myLang] || content;
+      const myLang  = info.lang || 'vi';
+      const display = translations[myLang] || content;
       sock.emit('new_post', {
         ...post.toObject(),
         displayContent: display,
@@ -488,13 +478,15 @@ app.post('/api/posts/:id/comment', auth, async (req, res) => {
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
     const user       = await User.findById(req.user.id);
-    const authorLang = user?.lang || 'en';
+    const authorLang = user?.lang || 'vi';
     const translations = await translateForAllUsers(content, authorLang, req.user.id);
-    const post       = await Post.findById(req.params.id);
+    const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ error: 'Not found' });
-    const comment = { authorId: req.user.id, authorName: user.displayName || user.username,
+    const comment = {
+      authorId: req.user.id, authorName: user.displayName || user.username,
       authorAvatar: user.avatar || '', content: content.trim(),
-      originalLang: authorLang, translations };
+      originalLang: authorLang, translations
+    };
     post.comments.push(comment);
     await post.save();
     io.emit('post_commented', { postId: post._id, comment, translations });
@@ -518,7 +510,7 @@ app.delete('/api/posts/:id', auth, async (req, res) => {
 // =========================================================================
 app.get('/api/messages/:roomId', auth, async (req, res) => {
   try {
-    const myLang = (await User.findById(req.user.id))?.lang || 'en';
+    const myLang = (await User.findById(req.user.id))?.lang || 'vi';
     const msgs   = await Message.find({ roomId: req.params.roomId })
       .sort({ createdAt: -1 }).limit(50);
     const result = msgs.reverse().map(m => ({
@@ -536,16 +528,12 @@ app.get('/api/messages/:roomId', auth, async (req, res) => {
 // =========================================================================
 //  GAME BRIDGE API (cho Mindustry ChatBridge.java)
 // =========================================================================
-
-// Plugin push tin nhan tu game len web — co dich thuat
 app.post('/api/game/chat/send', async (req, res) => {
   try {
     const { uuid, username, content, lang: gameLang } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Empty' });
+    const senderLang = gameLang || 'vi';
 
-    const senderLang = gameLang || 'en'; // Plugin co the gui kem lang
-
-    // Tim / tao user
     let user = await User.findOne({ uuid });
     if (!user && username) {
       let fn = username;
@@ -558,8 +546,6 @@ app.post('/api/game/chat/send', async (req, res) => {
     const senderName   = user?.displayName || user?.username || username || 'Game Player';
     const senderAvatar = user?.avatar || '';
     const senderId     = user?._id?.toString() || uuid || uuidv4();
-
-    // Dich sang tat ca ngon ngu online
     const translations = await translateForAllUsers(content, senderLang, null);
 
     const msg = await Message.create({
@@ -567,16 +553,16 @@ app.post('/api/game/chat/send', async (req, res) => {
       content, originalLang: senderLang, translations, fromGame: true
     });
 
-    // Phat tung user ban dich rieng
+    // Phát cho web users — bản dịch riêng cho từng người
     for (const [uid, info] of onlineUsers.entries()) {
       const sock   = io.sockets.sockets.get(info.socketId);
       if (!sock) continue;
-      const myLang = info.lang || 'en';
+      const myLang = info.lang || 'vi';
       const display = translations[myLang] || content;
       sock.emit('new_message', {
         _id: msg._id, roomId: 'global',
-        content: display, originalContent: content,
-        originalLang: senderLang,
+        content: display, displayContent: display,
+        originalContent: content, originalLang: senderLang,
         isTranslated: !!(translations[myLang] && senderLang !== myLang),
         senderId, senderName, senderAvatar,
         fromGame: true, createdAt: msg.createdAt
@@ -587,26 +573,23 @@ app.post('/api/game/chat/send', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Plugin poll tin nhan moi tu web (da dich sang ngon ngu game)
+// Poll tin nhắn mới từ web (cho plugin Java)
 app.get('/api/game/chat/poll', async (req, res) => {
   try {
-    const since   = req.query.since ? new Date(parseInt(req.query.since)) : new Date(Date.now() - 5000);
-    const gameLang = req.query.lang || 'en'; // Plugin gui kem ngon ngu can hien
+    const since    = req.query.since ? new Date(parseInt(req.query.since)) : new Date(Date.now() - 5000);
+    const gameLang = req.query.lang || 'vi';
     const msgs = await Message.find({
       roomId: 'global', fromGame: false,
       createdAt: { $gt: since }
     }).sort({ createdAt: 1 }).limit(20);
 
-    // Tra ve ban dich theo ngon ngu game (hoac tu dich neu chua co)
     const result = [];
     for (const m of msgs) {
       let display = m.translations?.get?.(gameLang) || m.content;
-      // Neu chua co ban dich cho ngon ngu nay thi dich them
       if (!m.translations?.get?.(gameLang) && gameLang !== m.originalLang) {
         const t = await translateText(m.content, gameLang, m.originalLang);
         if (t) {
           display = t;
-          // Luu vao DB
           m.translations.set(gameLang, t);
           await m.save();
         }
@@ -623,19 +606,18 @@ app.get('/api/game/chat/poll', async (req, res) => {
 
 app.get('/api/game/online', async (req, res) => {
   try {
-    const users = await User.find({ isOnline: true }).select('username displayName uuid isGameAccount lang').limit(50);
+    const users = await User.find({ isOnline: true })
+      .select('username displayName uuid isGameAccount lang').limit(50);
     res.json({ count: users.length, users });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// API detect ngon ngu tu IP (cho frontend)
 app.get('/api/detect-lang', async (req, res) => {
   const ip   = getRealIP(req);
   const lang = await detectLangFromIP(ip);
   res.json({ lang, ip });
 });
 
-// API dich thu (client co the goi)
 app.post('/api/translate', auth, async (req, res) => {
   try {
     const { text, targetLang, sourceLang } = req.body;
@@ -648,29 +630,204 @@ app.post('/api/translate', auth, async (req, res) => {
 });
 
 // =========================================================================
-//  HELPERS
+//  YOUTUBE SEARCH PROXY
+//  Scrape ytInitialData từ YouTube search page — không cần API key
+//  Tránh CORS bằng cách request từ server Node.js
 // =========================================================================
-function sanitize(user) {
-  const u = user.toObject ? user.toObject() : { ...user };
-  delete u.password;
-  return u;
+
+/**
+ * Scrape YouTube search results — parse ytInitialData từ HTML
+ */
+function scrapeYTSearch(q, maxResults = 16) {
+  return new Promise(resolve => {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=EgIQAQ%3D%3D`;
+    const options = {
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8',
+        'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Encoding': 'identity',
+      }
+    };
+
+    https.get(searchUrl, options, res => {
+      let html = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { if (html.length < 2000000) html += chunk; });
+      res.on('end', () => {
+        try {
+          // Tìm ytInitialData trong script tag
+          const marker = 'var ytInitialData = ';
+          const start  = html.indexOf(marker);
+          if (start < 0) { resolve([]); return; }
+
+          // Extract JSON object bằng cách đếm ngoặc
+          let depth = 0, i = start + marker.length;
+          const jsonStart = i;
+          for (; i < html.length; i++) {
+            if (html[i] === '{') depth++;
+            else if (html[i] === '}') { depth--; if (depth === 0) break; }
+          }
+
+          const data = JSON.parse(html.slice(jsonStart, i + 1));
+
+          // Đi vào structure YouTube
+          const contents =
+            data?.contents?.twoColumnSearchResultsRenderer
+                ?.primaryContents?.sectionListRenderer
+                ?.contents?.[0]?.itemSectionRenderer
+                ?.contents || [];
+
+          const videos = [];
+          for (const item of contents) {
+            const vr = item.videoRenderer;
+            if (!vr?.videoId) continue;
+
+            videos.push({
+              videoId:  vr.videoId,
+              title:    vr.title?.runs?.[0]?.text || 'Unknown',
+              channel:  vr.ownerText?.runs?.[0]?.text || '',
+              thumb:    `https://i.ytimg.com/vi/${vr.videoId}/mqdefault.jpg`,
+              duration: vr.lengthText?.simpleText || '',
+              views:    vr.viewCountText?.simpleText || '',
+            });
+
+            if (videos.length >= maxResults) break;
+          }
+
+          resolve(videos);
+        } catch(e) {
+          console.error('[YT Proxy] parse err:', e.message);
+          resolve([]);
+        }
+      });
+    }).on('error', err => {
+      console.error('[YT Proxy] fetch err:', err.message);
+      resolve([]);
+    });
+  });
 }
 
+/** YouTube Suggest — fallback khi search rỗng */
+function ytSuggest(q) {
+  return new Promise(resolve => {
+    const url = `https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${encodeURIComponent(q)}`;
+    https.get(url, { headers:{'User-Agent':'Mozilla/5.0'} }, res => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(d)[1] || []); } catch { resolve([]); }
+      });
+    }).on('error', () => resolve([]));
+  });
+}
+
+// GET /api/yt/search?q=...&max=16
+app.get('/api/yt/search', async (req, res) => {
+  try {
+    const q   = (req.query.q || '').trim();
+    const max = Math.min(parseInt(req.query.max) || 16, 24);
+    if (!q) return res.json({ videos: [], error: 'Missing query' });
+
+    const videos = await scrapeYTSearch(q, max);
+
+    if (!videos.length) {
+      const suggestions = await ytSuggest(q);
+      return res.json({ videos: [], suggestions, message: 'No results' });
+    }
+
+    res.json({ videos, total: videos.length });
+  } catch(e) {
+    console.error('[YT Search]', e.message);
+    res.status(500).json({ error: e.message, videos: [] });
+  }
+});
+
+// GET /api/yt/video/:videoId — embed info
+app.get('/api/yt/video/:videoId', (req, res) => {
+  const { videoId } = req.params;
+  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId))
+    return res.status(400).json({ error: 'Invalid video ID' });
+  res.json({
+    videoId,
+    embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`,
+    thumb:    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    thumbMq:  `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+  });
+});
+
+// =========================================================================
+//  MUSIC ASSETS ROUTES
+// =========================================================================
+
+// GET /api/music/list — danh sách file nhạc
+app.get('/api/music/list', (req, res) => {
+  const tracks = getMusicList();
+  res.json({ tracks, count: tracks.length });
+});
+
+// GET /api/music/random — random 1 bài
+app.get('/api/music/random', (req, res) => {
+  const tracks = getMusicList();
+  if (!tracks.length) return res.json({ track: null, message: 'No music in assets/music/' });
+  res.json({ track: tracks[Math.floor(Math.random() * tracks.length)] });
+});
+
+// GET /api/music/stream/:filename — stream file với Range request support
+app.get('/api/music/stream/:filename', (req, res) => {
+  try {
+    const filename = decodeURIComponent(req.params.filename);
+
+    // Security check — không cho path traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\'))
+      return res.status(400).json({ error: 'Invalid filename' });
+
+    const ext = path.extname(filename).toLowerCase();
+    if (!MUSIC_EXTS.includes(ext))
+      return res.status(400).json({ error: 'File type not allowed' });
+
+    const filePath = path.join(MUSIC_DIR, filename);
+    if (!fs.existsSync(filePath))
+      return res.status(404).json({ error: 'File not found' });
+
+    const stat        = fs.statSync(filePath);
+    const fileSize    = stat.size;
+    const contentType = MUSIC_MIME[ext] || 'audio/mpeg';
+    const range       = req.headers.range;
+
+    if (range) {
+      // Partial Content — cho phép seek trên mobile
+      const parts     = range.replace(/bytes=/, '').split('-');
+      const start     = parseInt(parts[0], 10);
+      const end       = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = (end - start) + 1;
+
+      res.writeHead(206, {
+        'Content-Range':  `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges':  'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type':   contentType,
+        'Cache-Control':  'public, max-age=3600',
+      });
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type':   contentType,
+        'Accept-Ranges':  'bytes',
+        'Cache-Control':  'public, max-age=3600',
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch(e) {
+    console.error('[Music Stream]', e.message);
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
 
 // =========================================================================
 //  ADMIN ROUTES
 // =========================================================================
-const adminAuth = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token' });
-  try {
-    const d = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(d.id);
-    if (!user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-    req.user = d; next();
-  } catch { res.status(401).json({ error: 'Invalid token' }); }
-};
-
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -692,8 +849,8 @@ app.put('/api/admin/users/:id', adminAuth, async (req, res) => {
     const { displayName, lang, status } = req.body;
     const update = {};
     if (displayName !== undefined) update.displayName = displayName;
-    if (lang !== undefined) update.lang = lang;
-    if (status !== undefined) update.status = status;
+    if (lang !== undefined)        update.lang        = lang;
+    if (status !== undefined)      update.status      = status;
     const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password');
     if (!user) return res.status(404).json({ error: 'Not found' });
     res.json(user);
@@ -734,7 +891,9 @@ app.delete('/api/admin/messages/:id', adminAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Admin tao tu dong khi khong co
+// =========================================================================
+//  INIT ADMIN
+// =========================================================================
 async function ensureAdmin() {
   const admin = await User.findOne({ isAdmin: true });
   if (!admin) {
@@ -745,5 +904,12 @@ async function ensureAdmin() {
 }
 mongoose.connection.once('open', ensureAdmin);
 
-
-server.listen(PORT, () => console.log(`🚀 abcxyz-offical-server-chat on :${PORT}`));
+// =========================================================================
+//  START
+// =========================================================================
+server.listen(PORT, () => {
+  console.log(`🚀 abcxyz-offical-server on :${PORT}`);
+  console.log(`🎵 Music dir: ${MUSIC_DIR}`);
+  console.log(`   Bỏ file mp3/ogg vào assets/music/ để phát nhạc nền`);
+  console.log(`🎬 YouTube proxy: GET /api/yt/search?q=...`);
+});
