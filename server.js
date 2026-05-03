@@ -27,7 +27,7 @@ mongoose.connect(MONGO_URI)
   .catch(e => console.error('MongoDB error:', e));
 
 // =========================================================================
-//  MUSIC ASSETS — serve từ assets/music/
+//  MUSIC ASSETS
 // =========================================================================
 const MUSIC_DIR   = path.join(__dirname, 'assets', 'music');
 const MUSIC_EXTS  = ['.mp3', '.ogg', '.wav', '.flac', '.aac', '.m4a', '.opus'];
@@ -39,7 +39,7 @@ const MUSIC_MIME  = {
 
 if (!fs.existsSync(MUSIC_DIR)) {
   fs.mkdirSync(MUSIC_DIR, { recursive: true });
-  console.log('📁 Created assets/music/ — bỏ file nhạc vào đây');
+  console.log('📁 Created assets/music/');
 }
 
 function getMusicList() {
@@ -50,13 +50,9 @@ function getMusicList() {
         const ext  = path.extname(f).toLowerCase();
         const stat = fs.statSync(path.join(MUSIC_DIR, f));
         return {
-          id:       i,
-          filename: f,
-          name:     path.basename(f, ext),
-          ext,
-          size:     stat.size,
-          mime:     MUSIC_MIME[ext] || 'audio/mpeg',
-          url:      `/api/music/stream/${encodeURIComponent(f)}`
+          id: i, filename: f, name: path.basename(f, ext), ext,
+          size: stat.size, mime: MUSIC_MIME[ext] || 'audio/mpeg',
+          url: `/api/music/stream/${encodeURIComponent(f)}`
         };
       });
   } catch { return []; }
@@ -68,13 +64,13 @@ function getMusicList() {
 const translationCache = new Map();
 const MAX_CACHE = 10000;
 
-function getCached(text, lang) { return translationCache.get(text + '::' + lang) || null; }
-function setCache(text, lang, translated) {
+function getCached(text, lang)   { return translationCache.get(text + '::' + lang) || null; }
+function setCache(text, lang, t) {
   if (translationCache.size > MAX_CACHE) {
     const first = translationCache.keys().next().value;
     translationCache.delete(first);
   }
-  translationCache.set(text + '::' + lang, translated);
+  translationCache.set(text + '::' + lang, t);
 }
 
 function translateText(text, targetLang, sourceLang) {
@@ -142,6 +138,19 @@ async function translateForAllUsers(text, sourceLang, excludeUserId) {
 }
 
 // =========================================================================
+//  PLATFORM BADGE HELPER
+//  Tra ve badge hien thi tren tung platform
+// =========================================================================
+function platformBadge(source) {
+  switch (source) {
+    case 'mcpe':      return { web: '🎮 MCPE',  game: '[MCPE]'  };
+    case 'mindustry': return { web: '⚡ MDY',   game: '[MDY]'   };
+    case 'web':       return { web: '🌐 Web',   game: '[WEB]'   };
+    default:          return { web: '❓',        game: '[?]'     };
+  }
+}
+
+// =========================================================================
 //  SCHEMAS
 // =========================================================================
 const userSchema = new mongoose.Schema({
@@ -170,17 +179,19 @@ const postSchema = new mongoose.Schema({
   image:        String,
   likes:        [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   comments: [{
-    authorId:     mongoose.Schema.Types.ObjectId,
-    authorName:   String,
-    authorAvatar: String,
-    content:      String,
+    authorId: mongoose.Schema.Types.ObjectId, authorName: String,
+    authorAvatar: String, content: String,
     translations: { type: Map, of: String, default: {} },
-    createdAt:    { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now }
   }],
-  fromGame:  { type: Boolean, default: false },
+  fromGame: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 
+// [CHANGED] Them truong source de phan biet nguon tin nhan:
+//   'web'       – gui tu web app (Socket.io)
+//   'mcpe'      – gui tu PocketMine plugin
+//   'mindustry' – gui tu Mindustry ChatBridge
 const messageSchema = new mongoose.Schema({
   roomId:       { type: String, required: true },
   senderId:     String,
@@ -190,8 +201,12 @@ const messageSchema = new mongoose.Schema({
   originalLang: { type: String, default: 'vi' },
   translations: { type: Map, of: String, default: {} },
   fromGame:     { type: Boolean, default: false },
+  source:       { type: String, default: 'web', enum: ['web', 'mcpe', 'mindustry'] }, // [NEW]
   createdAt:    { type: Date, default: Date.now }
 });
+
+// Index de poll nhanh
+messageSchema.index({ roomId: 1, source: 1, createdAt: 1 });
 
 const User    = mongoose.model('User',    userSchema);
 const Post    = mongoose.model('Post',    postSchema);
@@ -274,19 +289,20 @@ io.on('connection', async socket => {
       if (!user) return;
 
       const senderLang   = user.lang || socket.detectedLang || 'vi';
-      // Chỉ dịch khi gửi từ web → client (web→game)
-      // Client→client KHÔNG dịch ở đây, client tự hiển thị ngôn ngữ gốc
       const translations = await translateForAllUsers(content, senderLang, d.id);
 
+      // [CHANGED] them source: 'web'
       const msg = await Message.create({
         roomId, senderId: d.id, content,
         senderName:   user.displayName || user.username,
         senderAvatar: user.avatar || '',
         originalLang: senderLang,
         translations,
+        source: 'web',   // [NEW]
+        fromGame: false,
       });
 
-      // Phát bản dịch riêng cho từng user
+      // Phat ban dich rieng cho tung web user
       for (const [uid, info] of onlineUsers.entries()) {
         const sock = io.sockets.sockets.get(info.socketId);
         if (!sock) continue;
@@ -294,15 +310,12 @@ io.on('connection', async socket => {
         const showText    = uid === d.id ? content : (translations[myLang] || content);
         const isTranslated = uid !== d.id && !!translations[myLang] && senderLang !== myLang;
         sock.emit('new_message', {
-          _id: msg._id, roomId, content: showText,
-          displayContent: showText,
-          originalContent: content,
-          originalLang: senderLang,
+          _id: msg._id, roomId,
+          content: showText, displayContent: showText,
+          originalContent: content, originalLang: senderLang,
           isTranslated,
-          senderId:     d.id,
-          senderName:   msg.senderName,
-          senderAvatar: msg.senderAvatar,
-          fromGame: false,
+          senderId: d.id, senderName: msg.senderName, senderAvatar: msg.senderAvatar,
+          source: 'web', fromGame: false, // [NEW]
           createdAt: msg.createdAt
         });
       }
@@ -351,7 +364,6 @@ app.post('/api/auth/login', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// UUID login (từ Mindustry /webchat)
 app.post('/api/auth/uuid', async (req, res) => {
   try {
     const { uuid, username } = req.body;
@@ -526,14 +538,30 @@ app.get('/api/messages/:roomId', auth, async (req, res) => {
 });
 
 // =========================================================================
-//  GAME BRIDGE API (cho Mindustry ChatBridge.java)
+//  GAME BRIDGE API — dung chung cho MCPE va Mindustry
+//
+//  POST /api/game/chat/send
+//  Body: { uuid, username, content, lang, source }
+//    source: 'mcpe' | 'mindustry'  (default: 'mindustry' de tuong thich cu)
+//
+//  GET /api/game/chat/poll
+//  Query: since, lang, excludeSource
+//    excludeSource: 'mcpe' | 'mindustry'
+//    MCPE  poll voi excludeSource=mcpe       → nhan tin tu mindustry + web
+//    MDY   poll voi excludeSource=mindustry  → nhan tin tu mcpe + web
 // =========================================================================
+
+// [CHANGED] /api/game/chat/send — nhan tin tu bat ky game platform nao
 app.post('/api/game/chat/send', async (req, res) => {
   try {
-    const { uuid, username, content, lang: gameLang } = req.body;
+    const { uuid, username, content, lang: gameLang, source } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Empty' });
+
+    // source: 'mcpe' | 'mindustry' (default mindustry cho tuong thich nguoc)
+    const msgSource  = source === 'mcpe' ? 'mcpe' : 'mindustry';
     const senderLang = gameLang || 'vi';
 
+    // Upsert user
     let user = await User.findOne({ uuid });
     if (!user && username) {
       let fn = username;
@@ -546,14 +574,23 @@ app.post('/api/game/chat/send', async (req, res) => {
     const senderName   = user?.displayName || user?.username || username || 'Game Player';
     const senderAvatar = user?.avatar || '';
     const senderId     = user?._id?.toString() || uuid || uuidv4();
+
+    // Dich cho tat ca web user dang online
     const translations = await translateForAllUsers(content, senderLang, null);
 
+    // Luu vao DB voi source field
     const msg = await Message.create({
       roomId: 'global', senderId, senderName, senderAvatar,
-      content, originalLang: senderLang, translations, fromGame: true
+      content, originalLang: senderLang,
+      translations,
+      fromGame: true,
+      source: msgSource,   // [NEW] 'mcpe' hoac 'mindustry'
     });
 
-    // Phát cho web users — bản dịch riêng cho từng người
+    // Badge de web app hien thi nguon
+    const badge = platformBadge(msgSource);
+
+    // Phat cho tat ca web user dang online — co badge platform
     for (const [uid, info] of onlineUsers.entries()) {
       const sock   = io.sockets.sockets.get(info.socketId);
       if (!sock) continue;
@@ -565,27 +602,50 @@ app.post('/api/game/chat/send', async (req, res) => {
         originalContent: content, originalLang: senderLang,
         isTranslated: !!(translations[myLang] && senderLang !== myLang),
         senderId, senderName, senderAvatar,
-        fromGame: true, createdAt: msg.createdAt
+        source: msgSource,          // [NEW]
+        platformBadge: badge.web,   // [NEW] e.g. "🎮 MCPE"
+        fromGame: true,
+        createdAt: msg.createdAt
       });
     }
 
-    res.json({ success: true, messageId: msg._id, translatedTo: Object.keys(translations).length });
+    res.json({
+      success: true,
+      messageId: msg._id,
+      source: msgSource,
+      translatedTo: Object.keys(translations).length
+    });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Poll tin nhắn mới từ web (cho plugin Java)
+// [CHANGED] /api/game/chat/poll — tra ve tin tu cac nguon KHAC voi excludeSource
 app.get('/api/game/chat/poll', async (req, res) => {
   try {
-    const since    = req.query.since ? new Date(parseInt(req.query.since)) : new Date(Date.now() - 5000);
-    const gameLang = req.query.lang || 'vi';
-    const msgs = await Message.find({
-      roomId: 'global', fromGame: false,
-      createdAt: { $gt: since }
-    }).sort({ createdAt: 1 }).limit(20);
+    const since         = req.query.since
+      ? new Date(parseInt(req.query.since))
+      : new Date(Date.now() - 5000);
+    const gameLang      = req.query.lang || 'vi';
+    const excludeSource = req.query.excludeSource || null; // 'mcpe' | 'mindustry'
+
+    // [CHANGED] Filter: chi lay tin tu cac nguon khac voi excludeSource
+    // Neu excludeSource=mcpe    → lay mindustry + web
+    // Neu excludeSource=mindustry → lay mcpe + web
+    // Neu khong co excludeSource → lay tat ca (backward compat)
+    const filter = {
+      roomId:    'global',
+      createdAt: { $gt: since },
+    };
+    if (excludeSource) {
+      filter.source = { $ne: excludeSource };
+    }
+
+    const msgs = await Message.find(filter).sort({ createdAt: 1 }).limit(20);
 
     const result = [];
     for (const m of msgs) {
       let display = m.translations?.get?.(gameLang) || m.content;
+
+      // Dich on-demand neu chua co
       if (!m.translations?.get?.(gameLang) && gameLang !== m.originalLang) {
         const t = await translateText(m.content, gameLang, m.originalLang);
         if (t) {
@@ -594,12 +654,22 @@ app.get('/api/game/chat/poll', async (req, res) => {
           await m.save();
         }
       }
+
+      const badge = platformBadge(m.source || 'web');
+
       result.push({
-        _id: m._id, senderName: m.senderName, content: display,
-        originalContent: m.content, originalLang: m.originalLang,
-        isTranslated: display !== m.content, createdAt: m.createdAt
+        _id:             m._id,
+        senderName:      m.senderName,
+        content:         display,
+        originalContent: m.content,
+        originalLang:    m.originalLang,
+        isTranslated:    display !== m.content,
+        source:          m.source || 'web',       // [NEW]
+        platformBadge:   badge.game,              // [NEW] e.g. "[WEB]" "[MCPE]"
+        createdAt:       m.createdAt
       });
     }
+
     res.json(result);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -631,119 +701,83 @@ app.post('/api/translate', auth, async (req, res) => {
 
 // =========================================================================
 //  YOUTUBE SEARCH PROXY
-//  Scrape ytInitialData từ YouTube search page — không cần API key
-//  Tránh CORS bằng cách request từ server Node.js
 // =========================================================================
-
-/**
- * Scrape YouTube search results — parse ytInitialData từ HTML
- */
 function scrapeYTSearch(q, maxResults = 16) {
   return new Promise(resolve => {
     const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=EgIQAQ%3D%3D`;
     const options = {
       headers: {
-        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8',
-        'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Encoding': 'identity',
       }
     };
-
     https.get(searchUrl, options, res => {
       let html = '';
       res.setEncoding('utf8');
       res.on('data', chunk => { if (html.length < 2000000) html += chunk; });
       res.on('end', () => {
         try {
-          // Tìm ytInitialData trong script tag
           const marker = 'var ytInitialData = ';
           const start  = html.indexOf(marker);
           if (start < 0) { resolve([]); return; }
-
-          // Extract JSON object bằng cách đếm ngoặc
           let depth = 0, i = start + marker.length;
           const jsonStart = i;
           for (; i < html.length; i++) {
             if (html[i] === '{') depth++;
             else if (html[i] === '}') { depth--; if (depth === 0) break; }
           }
-
           const data = JSON.parse(html.slice(jsonStart, i + 1));
-
-          // Đi vào structure YouTube
           const contents =
             data?.contents?.twoColumnSearchResultsRenderer
                 ?.primaryContents?.sectionListRenderer
-                ?.contents?.[0]?.itemSectionRenderer
-                ?.contents || [];
-
+                ?.contents?.[0]?.itemSectionRenderer?.contents || [];
           const videos = [];
           for (const item of contents) {
             const vr = item.videoRenderer;
             if (!vr?.videoId) continue;
-
             videos.push({
-              videoId:  vr.videoId,
-              title:    vr.title?.runs?.[0]?.text || 'Unknown',
-              channel:  vr.ownerText?.runs?.[0]?.text || '',
-              thumb:    `https://i.ytimg.com/vi/${vr.videoId}/mqdefault.jpg`,
+              videoId: vr.videoId, title: vr.title?.runs?.[0]?.text || 'Unknown',
+              channel: vr.ownerText?.runs?.[0]?.text || '',
+              thumb: `https://i.ytimg.com/vi/${vr.videoId}/mqdefault.jpg`,
               duration: vr.lengthText?.simpleText || '',
-              views:    vr.viewCountText?.simpleText || '',
+              views: vr.viewCountText?.simpleText || '',
             });
-
             if (videos.length >= maxResults) break;
           }
-
           resolve(videos);
-        } catch(e) {
-          console.error('[YT Proxy] parse err:', e.message);
-          resolve([]);
-        }
+        } catch(e) { console.error('[YT Proxy] parse err:', e.message); resolve([]); }
       });
-    }).on('error', err => {
-      console.error('[YT Proxy] fetch err:', err.message);
-      resolve([]);
-    });
+    }).on('error', err => { console.error('[YT Proxy] fetch err:', err.message); resolve([]); });
   });
 }
 
-/** YouTube Suggest — fallback khi search rỗng */
 function ytSuggest(q) {
   return new Promise(resolve => {
     const url = `https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${encodeURIComponent(q)}`;
     https.get(url, { headers:{'User-Agent':'Mozilla/5.0'} }, res => {
       let d = '';
       res.on('data', c => d += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(d)[1] || []); } catch { resolve([]); }
-      });
+      res.on('end', () => { try { resolve(JSON.parse(d)[1] || []); } catch { resolve([]); } });
     }).on('error', () => resolve([]));
   });
 }
 
-// GET /api/yt/search?q=...&max=16
 app.get('/api/yt/search', async (req, res) => {
   try {
     const q   = (req.query.q || '').trim();
     const max = Math.min(parseInt(req.query.max) || 16, 24);
     if (!q) return res.json({ videos: [], error: 'Missing query' });
-
     const videos = await scrapeYTSearch(q, max);
-
     if (!videos.length) {
       const suggestions = await ytSuggest(q);
       return res.json({ videos: [], suggestions, message: 'No results' });
     }
-
     res.json({ videos, total: videos.length });
-  } catch(e) {
-    console.error('[YT Search]', e.message);
-    res.status(500).json({ error: e.message, videos: [] });
-  }
+  } catch(e) { console.error('[YT Search]', e.message); res.status(500).json({ error: e.message, videos: [] }); }
 });
 
-// GET /api/yt/video/:videoId — embed info
 app.get('/api/yt/video/:videoId', (req, res) => {
   const { videoId } = req.params;
   if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId))
@@ -759,63 +793,45 @@ app.get('/api/yt/video/:videoId', (req, res) => {
 // =========================================================================
 //  MUSIC ASSETS ROUTES
 // =========================================================================
-
-// GET /api/music/list — danh sách file nhạc
 app.get('/api/music/list', (req, res) => {
   const tracks = getMusicList();
   res.json({ tracks, count: tracks.length });
 });
 
-// GET /api/music/random — random 1 bài
 app.get('/api/music/random', (req, res) => {
   const tracks = getMusicList();
   if (!tracks.length) return res.json({ track: null, message: 'No music in assets/music/' });
   res.json({ track: tracks[Math.floor(Math.random() * tracks.length)] });
 });
 
-// GET /api/music/stream/:filename — stream file với Range request support
 app.get('/api/music/stream/:filename', (req, res) => {
   try {
     const filename = decodeURIComponent(req.params.filename);
-
-    // Security check — không cho path traversal
     if (filename.includes('..') || filename.includes('/') || filename.includes('\\'))
       return res.status(400).json({ error: 'Invalid filename' });
-
     const ext = path.extname(filename).toLowerCase();
-    if (!MUSIC_EXTS.includes(ext))
-      return res.status(400).json({ error: 'File type not allowed' });
-
+    if (!MUSIC_EXTS.includes(ext)) return res.status(400).json({ error: 'File type not allowed' });
     const filePath = path.join(MUSIC_DIR, filename);
-    if (!fs.existsSync(filePath))
-      return res.status(404).json({ error: 'File not found' });
-
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
     const stat        = fs.statSync(filePath);
     const fileSize    = stat.size;
     const contentType = MUSIC_MIME[ext] || 'audio/mpeg';
     const range       = req.headers.range;
-
     if (range) {
-      // Partial Content — cho phép seek trên mobile
       const parts     = range.replace(/bytes=/, '').split('-');
       const start     = parseInt(parts[0], 10);
       const end       = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
       const chunkSize = (end - start) + 1;
-
       res.writeHead(206, {
-        'Content-Range':  `bytes ${start}-${end}/${fileSize}`,
-        'Accept-Ranges':  'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type':   contentType,
-        'Cache-Control':  'public, max-age=3600',
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes', 'Content-Length': chunkSize,
+        'Content-Type': contentType, 'Cache-Control': 'public, max-age=3600',
       });
       fs.createReadStream(filePath, { start, end }).pipe(res);
     } else {
       res.writeHead(200, {
-        'Content-Length': fileSize,
-        'Content-Type':   contentType,
-        'Accept-Ranges':  'bytes',
-        'Cache-Control':  'public, max-age=3600',
+        'Content-Length': fileSize, 'Content-Type': contentType,
+        'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=3600',
       });
       fs.createReadStream(filePath).pipe(res);
     }
@@ -909,7 +925,9 @@ mongoose.connection.once('open', ensureAdmin);
 // =========================================================================
 server.listen(PORT, () => {
   console.log(`🚀 abcxyz-offical-server on :${PORT}`);
+  console.log(`🎮 Cross-platform chat: MCPE ↔ Mindustry ↔ Web`);
+  console.log(`   POST /api/game/chat/send  { source: 'mcpe'|'mindustry' }`);
+  console.log(`   GET  /api/game/chat/poll  ?excludeSource=mcpe|mindustry`);
   console.log(`🎵 Music dir: ${MUSIC_DIR}`);
-  console.log(`   Bỏ file mp3/ogg vào assets/music/ để phát nhạc nền`);
   console.log(`🎬 YouTube proxy: GET /api/yt/search?q=...`);
 });
